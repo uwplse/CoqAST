@@ -1,5 +1,7 @@
 DECLARE PLUGIN "ast_plugin"
 
+open Declarations
+
 (* Plugin to print an AST for a definition.
    Based on TemplateCoq: https://github.com/gmalecha/template-coq/blob/master/src/reify.ml4 *)
 
@@ -177,21 +179,23 @@ let build_fix mkdefs constr_b =
 
 (* --- Inductive types --- *)
 
-let mutually_inductive_body i env =
-  Environ.lookup_mind (fst i) env
+let lookup_mutind_body i env =
+  Environ.lookup_mind i env
 
-let build_inductive_name i env =
-  let body = mutually_inductive_body i env in
-  let def = Array.get (body.mind_packets) 0 in
-  let name_id = def.mind_typename in
+let build_inductive_name (ind_body : one_inductive_body) =
+  let name_id = ind_body.mind_typename in
   build "Name" [Names.string_of_id name_id]
 
-let build_constructor ((i, c), u) =
-  let c' = string_of_int c in
-  if show_universes () then
-    build "Construct" [i; c'; build_universe_instance u]
-  else
-    build "Construct" [i; c']
+let inductive_rel (env : Environ.env) (mutind_body : mutual_inductive_body) (ind_body : one_inductive_body) =
+  let univ_context = mutind_body.mind_universes in
+  let univ_instance = Univ.UContext.instance univ_context in
+  let name_id = ind_body.mind_typename in
+  let mutind_spec = (mutind_body, ind_body) in
+  let typ = Inductive.type_of_inductive env (mutind_spec, univ_instance) in
+  (Names.Name name_id, None, typ)
+
+let push_inductive_rels (env : Environ.env) (mutind_body : mutual_inductive_body) (ind_bodies : one_inductive_body list) =
+  Environ.push_rel_context (List.map (inductive_rel env mutind_body) ind_bodies) env
 
 let build_inductive (cs, u) =
   if show_universes () then
@@ -199,10 +203,22 @@ let build_inductive (cs, u) =
   else
     build "Ind" cs
 
-let build_ctor_list =
-  fun ls ->
-    let ctors = List.map (fun (a, b) -> build a [b]) ls in
-    build "inductive_body" ctors
+let build_inductive_body (constrs : string list) =
+  build "inductive_body" constrs
+
+(* --- Inductive constructors --- *)
+
+let named_constructors (ind_body : one_inductive_body) =
+  let constr_names = Array.to_list ind_body.mind_consnames in
+  let constrs = Array.to_list ind_body.mind_user_lc in
+  List.combine constr_names constrs
+
+let build_constructor ((i, c_index), u) =
+  let c_index' = string_of_int c_index in
+  if show_universes () then
+    build "Construct" [i; c_index'; build_universe_instance u]
+  else
+    build "Construct" [i; c_index']
 
 (* --- Pattern matching --- *)
 
@@ -217,7 +233,7 @@ let build_unknown trm =
 
 (* --- Full AST --- *)
 
-let rec build_ast env trm depth =
+let rec build_ast (env : Environ.env) (depth : int) (trm : Term.types) =
   match Term.kind_of_term trm with
     Term.Rel i ->
       build_rel env i
@@ -226,48 +242,48 @@ let rec build_ast env trm depth =
   | Term.Sort s ->
       build_sort s
   | Term.Cast (c, k, t) ->
-      let c' = build_ast env c depth in
+      let c' = build_ast env depth c in
       let k' = build_cast_kind k in
-      let t' = build_ast env t depth in
+      let t' = build_ast env depth t in
       build_cast (c', k', t')
   | Term.Prod (n, t, b) ->
       let n' = build_name n in
-      let t' = build_ast env t depth in
-      let b' = build_ast (Environ.push_rel (n, None, t) env) b depth in
+      let t' = build_ast env depth t in
+      let b' = build_ast (Environ.push_rel (n, None, t) env) depth b in
       build_product (n', t', b')
   | Term.Lambda (n, t, b) ->
       let n' = build_name n in
-      let t' = build_ast env t depth in
-      let b' = build_ast (Environ.push_rel (n, None, t) env) b depth in
+      let t' = build_ast env depth t in
+      let b' = build_ast (Environ.push_rel (n, None, t) env) depth b in
       build_lambda (n', t', b')
   | Term.LetIn (n, t, e, b) ->
       let n' = build_name n in
-      let t' = build_ast env t depth in
-      let e' = build_ast env e depth in
-      let b' = build_ast (Environ.push_rel (n, Some e, t) env) b depth in
+      let t' = build_ast env depth t in
+      let e' = build_ast env depth e in
+      let b' = build_ast (Environ.push_rel (n, Some e, t) env) depth b in
       build_let_in (n', t', e', b')
   | Term.App (f, xs) ->
-      let f' = build_ast env f depth in
-      let xs' = List.map (fun x -> build_ast env x depth) (Array.to_list xs) in
+      let f' = build_ast env depth f in
+      let xs' = List.map (build_ast env depth) (Array.to_list xs) in
       build_app (f', xs')
   | Term.Const (c, u) ->
-      build_const env (c, u) depth
-  | Term.Construct ((i, c), u) ->
-      let i' = build_ast env (Term.mkInd i) depth in
-      build_constructor ((i', c), u)
-  | Term.Ind (i, u) ->
-      build_minductive env (i, u) depth
+      build_const env depth (c, u)
+  | Term.Construct ((i, c_index), u) -> (* TODO can probably get actual constructor, should I? *)
+      let i' = build_ast env depth (Term.mkInd i) in
+      build_constructor ((i', c_index), u)
+  | Term.Ind ((i, i_index), u) ->
+      build_minductive env depth ((i, i_index), u)
   | Term.Case (ci, a, b, e) ->
-      let c_a = build_ast env a depth in
-      let c_b = build_ast env b depth in
-      let branches = List.map (fun x -> build_ast env x depth) (Array.to_list e) in
+      let c_a = build_ast env depth a in
+      let c_b = build_ast env depth b in
+      let branches = List.map (build_ast env depth) (Array.to_list e) in
       build_case (ci, c_a, c_b, branches)
   | Term.Fix fp ->
-      build_fixpoint env fp depth
+      build_fixpoint env depth fp
   | _ ->
       build_unknown trm
 
-and build_const env (c, u) depth =
+and build_const (env : Environ.env) (depth : int) (c, u) =
   let kn = Names.Constant.canonical c in
   let cb = Environ.lookup_constant c env in
   let global_env = Global.env () in
@@ -275,67 +291,53 @@ and build_const env (c, u) depth =
     Undef _ ->
       begin
         match cb.const_type with
-          RegularArity ty -> build_axiom kn (build_ast global_env ty depth) u
+          RegularArity ty -> build_axiom kn (build_ast global_env depth ty) u
         | TemplateArity _ -> assert false (* Pre-8.5 universe polymorphism *)
       end
-  | Def cs -> build_pconstr kn (build_ast global_env (Mod_subst.force_constr cs) depth) u
-  | OpaqueDef lc -> build_pconstr kn (build_ast global_env (Opaqueproof.force_proof (Global.opaque_tables ()) lc) depth) u
+  | Def cs -> build_pconstr kn (build_ast global_env depth (Mod_subst.force_constr cs)) u
+  | OpaqueDef lc -> build_pconstr kn (build_ast global_env depth (Opaqueproof.force_proof (Global.opaque_tables ()) lc)) u
 
-and build_fixpoint env t depth =
+and build_fixpoint (env : Environ.env) (depth : int) t =
   let ((c_a, c_b), (names, typs, defs)) = t in
   let ctxt = CArray.map2_i (fun i name typ -> (name, None, Vars.lift i typ)) names typs in
   let mkdefs =
     List.map
       (fun i ->
-         let typ = build_ast env (Array.get typs i) depth in
-         let def = build_ast (Environ.push_rel_context (Array.to_list ctxt) env) (Array.get defs i) depth in
+         let typ = build_ast env depth (Array.get typs i) in
+         let def = build_ast (Environ.push_rel_context (Array.to_list ctxt) env) depth (Array.get defs i) in
          build_mkdef i names typ def)
       (seq 0 (Array.length c_a))
   in build_fix mkdefs c_b
 
-and build_minductive env (i, u) depth =
+and build_oinductive (env : Environ.env) (depth : int) (ind_body : one_inductive_body) =
+  let constrs =
+    List.map
+      (fun (nm, ty) -> build (Names.string_of_id nm) [build_ast env (depth - 1) ty])
+    (named_constructors ind_body)
+  in build (build_inductive_name ind_body) [build_inductive_body constrs]
+
+and build_minductive (env : Environ.env) (depth : int) (((i, i_index), u) : Names.inductive * Univ.universe_instance) =
+  let mutind_body = lookup_mutind_body i env in
+  let ind_bodies = mutind_body.mind_packets in
   if depth = 0 then (* don't expand *)
-    build_inductive_name i env
+    build_inductive_name (Array.get ind_bodies i_index)
   else (* expand *)
-    let mib = mutually_inductive_body i env in
-    let inst = Univ.UContext.instance mib.Declarations.mind_universes in
-    let indtys =
-      Array.to_list Declarations.(Array.map (fun oib ->
-        let ty = Inductive.type_of_inductive env ((mib, oib), inst) in
-        (Names.Name oib.mind_typename, None, ty)) mib.mind_packets)
-    in
-    let envind = Environ.push_rel_context indtys env in
-    let ls =
-      List.fold_left (fun ls oib -> (* One inductive body *)
-        let named_ctors =
-	  List.combine
-	    Declarations.(Array.to_list oib.mind_consnames)
-	    Declarations.(Array.to_list oib.mind_user_lc)
-	in
-	let ctor_asts =
-	  List.fold_left (fun ls (nm, ty) ->
-	    let ty = build_ast envind ty (depth - 1) in
-	    (Names.string_of_id nm, ty) :: ls)
-	  [] named_ctors
-	in
-	  Declarations.((build "Name" [Names.string_of_id oib.mind_typename]),
-	    build_ctor_list (List.rev ctor_asts)) :: ls)
-	  [] (Array.to_list mib.mind_packets) (* Array of one inductive bodies *)
-    in
-    let cs = List.map (fun (a, b) -> build a [b]) (List.rev ls) in
+    let ind_bodies_list = Array.to_list ind_bodies in
+    let env_ind = push_inductive_rels env mutind_body ind_bodies_list in
+    let cs = List.map (build_oinductive env_ind depth) ind_bodies_list in
     build_inductive (cs, u)
 
-let print_ast def depth =
+let print_ast (depth : int) def =
   let (evm, env) = Lemmas.get_current_context() in
   let (body, _) = Constrintern.interp_constr env evm def in
-  print (build_ast env body depth)
+  print (build_ast env depth body)
 
 (* PrintAST command
    The depth specifies the depth at which to unroll nested inductive types *)
 VERNAC COMMAND EXTEND Print_AST
 | [ "PrintAST" constr(def) ] ->
-  [ print_ast def 1 ]
+  [ print_ast 1 def ]
 | [ "PrintAST" constr(def) "with" "depth" string(depth)] ->
-  [ print_ast def (int_of_string depth) ]
+  [ print_ast (int_of_string depth) def ]
 END
 
