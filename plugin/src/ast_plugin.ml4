@@ -39,16 +39,22 @@ let pp_constr fmt x = Pp.pp_with fmt (Printer.pr_constr x)
 
 let pp_univ_level fmt l = Pp.pp_with fmt (Univ.Level.pr l)
 
-let rec pair_with_number st ls =
-  match ls with
-    [] -> []
-  | l :: ls -> (st, l) :: pair_with_number (st + 1) ls
-
 let wrap str =
   String.concat "" ["(" ; str ; ")"]
 
 let build typ trms =
   wrap (String.concat " " (typ :: trms))
+
+let rec seq f t =
+  if f < t then
+    f :: seq (f + 1) t
+  else
+    []
+
+let rec pair_with_number st ls =
+  match ls with
+    [] -> []
+  | l :: ls -> (st, l) :: pair_with_number (st + 1) ls
 
 (* --- Names --- *)
 
@@ -145,19 +151,29 @@ let build_app (f, args) =
 let build_kername kn =
   Names.string_of_kn kn
 
-let build_axiom kn ty u =
+let build_axiom kn typ u =
   let kn' = build_kername kn in
   if show_universes () then
-    build "pAxiom" [kn'; ty; build_universe_instance u]
+    build "pAxiom" [kn'; typ; build_universe_instance u]
   else
-    build "pAxiom" [kn'; ty]
+    build "pAxiom" [kn'; typ]
 
-let build_pconstr kn ty u =
+let build_pconstr kn typ u =
    let kn' = build_kername kn in
    if show_universes () then
-     build "pConstr" [kn'; ty; build_universe_instance u]
+     build "pConstr" [kn'; typ; build_universe_instance u]
    else
-     build "pConstr" [kn'; ty]
+     build "pConstr" [kn'; typ]
+
+(* --- Fixpoints --- *)
+
+let build_mkdef i names typ def =
+  let n = string_of_int i in
+  let nm = build_name (Array.get names i) in
+  build "mkdef" ["term"; nm; typ; def; n]
+
+let build_fix mkdefs constr_b =
+  build "Fix" [build "def" ("term" :: mkdefs); string_of_int constr_b]
 
 (* --- Inductive types --- *)
 
@@ -251,38 +267,31 @@ let rec build_ast env trm depth =
   | _ ->
       build_unknown trm
 
-and build_undef (cb : Declarations.constant_body) kn u depth = (* TODO left off here downward *)
-  match cb.const_type with
-    RegularArity ty -> build_axiom kn (build_ast (Global.env ()) ty depth) u
-  | TemplateArity _ -> assert false (* Pre-8.5 universe polymorphism *)
-
 and build_const env (c, u) depth =
   let kn = Names.Constant.canonical c in
   let cb = Environ.lookup_constant c env in
+  let global_env = Global.env () in
   match cb.const_body with
-    Undef _ -> build_undef cb kn u depth
-  | Def cs -> build_pconstr kn (build_ast (Global.env ()) (Mod_subst.force_constr cs) depth) u
-  | OpaqueDef lc -> build_pconstr kn (build_ast (Global.env ()) (Opaqueproof.force_proof (Global.opaque_tables ()) lc) depth) u
+    Undef _ ->
+      begin
+        match cb.const_type with
+          RegularArity ty -> build_axiom kn (build_ast global_env ty depth) u
+        | TemplateArity _ -> assert false (* Pre-8.5 universe polymorphism *)
+      end
+  | Def cs -> build_pconstr kn (build_ast global_env (Mod_subst.force_constr cs) depth) u
+  | OpaqueDef lc -> build_pconstr kn (build_ast global_env (Opaqueproof.force_proof (Global.opaque_tables ()) lc) depth) u
 
 and build_fixpoint env t depth =
-  let ((a, b), (ns, ts, ds)) = t in
-    let rec seq f t =
-      if f < t then
-        f :: seq (f + 1) t
-      else
-        []
-      in
-      let ctxt = CArray.map2_i (fun i na t -> (na, None, Vars.lift i t)) ns ts in
-      let envfix = Environ.push_rel_context (Array.to_list ctxt) env in
-      let mk_fun xs i =
-	let n = string_of_int i in
-	let nm = build_name (Array.get ns i) in
-	let ty = build_ast env (Array.get ts i) depth in
-	let ds = build_ast envfix (Array.get ds i) depth in
-	(build "mkdef" ["term"; nm; ty; ds; n]) :: xs
-      in
-      let defs = List.fold_left mk_fun [] (seq 0 (Array.length a)) in
-      build "Fix" [build "def" ("term" :: (List.rev defs)); string_of_int b]
+  let ((c_a, c_b), (names, typs, defs)) = t in
+  let ctxt = CArray.map2_i (fun i name typ -> (name, None, Vars.lift i typ)) names typs in
+  let mkdefs =
+    List.map
+      (fun i ->
+         let typ = build_ast env (Array.get typs i) depth in
+         let def = build_ast (Environ.push_rel_context (Array.to_list ctxt) env) (Array.get defs i) depth in
+         build_mkdef i names typ def)
+      (seq 0 (Array.length c_a))
+  in build_fix mkdefs c_b
 
 and build_minductive env (i, u) depth =
   if depth = 0 then (* don't expand *)
