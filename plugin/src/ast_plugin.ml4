@@ -390,6 +390,12 @@ let build_fix_fun (index : int) (n : name) (typ_ast : string) (body_ast : string
 let build_fix (funs : string list) (index : int) =
   build "Fix" [build "Functions" funs; string_of_int index]
 
+(*
+ * Build the AST for a cofixpoint
+ *)
+let build_cofix (funs : string list) (index : int) =
+  build "CoFix" [build "Functions" funs; string_of_int index]
+
 (* --- Inductive types --- *)
 
 (*
@@ -538,6 +544,8 @@ let rec build_ast (env : Environ.env) (depth : int) (trm : types) =
       build_case ci c_a c_b branches
   | Fix fp ->
       build_fixpoint env depth fp
+  | CoFix cfp ->
+      build_cofixpoint env depth cfp
   | _ ->
       build_unknown trm
 
@@ -566,6 +574,18 @@ and build_fixpoint (env : Environ.env) (depth : int) (fp : (constr, types) pfixp
          build_fix_fun i (Array.get names i) typ def)
       (range 0 (Array.length indexes))
   in build_fix funs index
+
+and build_cofixpoint (env : Environ.env) (depth : int) (cfp : (constr, types) pcofixpoint) =
+  let (index, (names, typs, defs)) = cfp in
+  let env_cofix = Environ.push_rel_context (bindings_for_fix names typs) env in
+  let funs =
+    List.map
+      (fun i ->
+         let typ = build_ast env depth (Array.get typs i) in
+         let def = build_ast env_cofix depth (Array.get defs i) in
+         build_fix_fun i (Array.get names i) typ def)
+      (range 0 (Array.length names))
+  in build_cofix funs index
 
 and build_oinductive (env : Environ.env) (depth : int) (ind_body : one_inductive_body) =
   let constrs =
