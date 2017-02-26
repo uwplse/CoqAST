@@ -365,6 +365,8 @@ let build_definition (kn : kernel_name) (typ_ast : string) (u : Instance.t) =
  * The fixpoint has a final index which denotes the actual fixpoint we care about
  * When there is only one recursive function in the fixpoint, this index is implicitly 1
  *
+ * A CoFixpoint has basically the same structure, except that it is useful for representing an infinite stream of data
+ *
  * Right now we explicitly write out the index instead of retrieving the definition we care about
  *)
 
@@ -483,16 +485,22 @@ let build_constructor (t_ast : string) (index : int) (u : Instance.t) =
 (* --- Pattern matching --- *)
 
 (*
- * I have no idea what's going on here yet
- * TODO!
+ * A Case expression is used for pattern matching
+ * Every Case expression has a type, a type it matches against, and a list of branches
+ *
+ * Each Case expression also has a case_info, which is basically metadata
+ * It contains the number of arguments, the number of pattern variables of each constructor, and printing information
+ * Right now we only use the number of arguments from this
  *)
 
 (*
  * Build an AST for a Case expression
  *)
-let build_case (info : case_info) (c_a : string) (c_b : string) (branches : string list) =
-  let npar = string_of_int info.ci_npar in (* TODO still not sure what npar is *)
-  build "Case" (npar :: (c_a :: (c_b :: branches)))
+let build_case (info : case_info) (case_typ_ast : string) (match_ast : string) (branch_asts : string list) =
+  let num_args = string_of_int info.ci_npar in
+  let match_typ = build "CaseMatch" [match_ast] in
+  let branches = build "CaseBranches" branch_asts in
+  build "Case" [num_args; case_typ_ast; match_typ; branches]
 
 (* --- Unknown type, not yet supported by plugin, but we can pretty-print --- *)
 
@@ -532,16 +540,16 @@ let rec build_ast (env : Environ.env) (depth : int) (trm : types) =
       build_app f' xs'
   | Const (c, u) ->
       build_const env depth (c, u)
-  | Construct ((i, c_index), u) -> (* TODO can probably get actual constructor, should I? *)
+  | Construct ((i, c_index), u) ->
       let i' = build_ast env depth (Term.mkInd i) in
       build_constructor i' c_index u
   | Ind ((i, i_index), u) ->
       build_minductive env depth ((i, i_index), u)
-  | Case (ci, a, b, e) ->
-      let c_a = build_ast env depth a in
-      let c_b = build_ast env depth b in
-      let branches = List.map (build_ast env depth) (Array.to_list e) in
-      build_case ci c_a c_b branches
+  | Case (ci, ct, m, bs) ->
+      let typ = build_ast env depth ct in
+      let match_typ = build_ast env depth m in
+      let branches = List.map (build_ast env depth) (Array.to_list bs) in
+      build_case ci typ match_typ branches
   | Fix ((is, i), (ns, ts, ds)) ->
       build_fix (build_fixpoint_functions env depth ns ts ds) i
   | CoFix (i, (ns, ts, ds)) ->
@@ -557,11 +565,11 @@ and build_const (env : Environ.env) (depth : int) ((c, u) : pconstant) =
     None ->
       begin
         match cd.const_type with
-          RegularArity ty -> build_axiom kn (build_ast global_env depth ty) u
+          RegularArity ty -> build_axiom kn (build_ast global_env (depth - 1) ty) u
         | TemplateArity _ -> assert false (* pre-8.5 universe polymorphism *)
       end
   | Some c ->
-      build_definition kn (build_ast global_env depth c) u
+      build_definition kn (build_ast global_env (depth - 1) c) u
 
 and build_fixpoint_functions (env : Environ.env) (depth : int) (names : name array) (typs : constr array) (defs : constr array)  =
   let env_fix = Environ.push_rel_context (bindings_for_fix names typs) env in
@@ -596,7 +604,7 @@ let print_ast (depth : int) (def : Constrexpr.constr_expr) =
   print (build_ast env depth body)
 
 (* PrintAST command
-   The depth specifies the depth at which to unroll nested inductive types *)
+   The depth specifies the depth at which to unroll nested type definitions *)
 VERNAC COMMAND EXTEND Print_AST
 | [ "PrintAST" constr(def) ] ->
   [ print_ast 1 def ]
