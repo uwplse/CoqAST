@@ -127,6 +127,35 @@ let build_name (n : name) =
 let build_var (v : identifier) =
   build "Var" [string_of_id v]
 
+(* --- Metavariables --- *)
+
+(*
+ * A metavariable is an unknown ?n
+ * A metavariable is represented by an integer
+ *
+ * This is only useful if you are extending this plugin
+ * For now we don't actually do anything with it except print the index
+ * It doesn't look like these are DeBruijn indexes -- rather each metavariable has a unique int
+ *)
+
+let build_meta (n : metavariable) =
+  build "Meta" [string_of_int n]
+
+(* --- Existential variables --- *)
+
+(*
+ * Existential variables are basically integers, like metavariables
+ * It's unclear to me why these exist separately from metavariables in the AST, since the words are used interchangeably in comments
+ * The existential_key technically has a different type, but this is only for the kernel
+ *
+ * These are also only useful if you are extending the plugin
+ * I have no clue why existentials and metavariables are distinct in the AST
+ * I also don't know what the array of constructors is for -- if you figure this all out please submit a pull request!
+ *)
+
+let build_evar (k : existential_key) (c_asts : string list) =
+  build "Evar" ((string_of_int (Evar.repr k)) :: c_asts)
+
 (* --- Indexes --- *)
 
 (*
@@ -515,6 +544,11 @@ let rec build_ast (env : Environ.env) (depth : int) (trm : types) =
       build_rel env i
   | Var v ->
       build_var v
+  | Meta mv ->
+      build_meta mv
+  | Evar (k, cs) ->
+      let cs' = List.map (build_ast env depth) (Array.to_list cs) in
+      build_evar k cs'
   | Sort s ->
       build_sort s
   | Cast (c, k, t) ->
