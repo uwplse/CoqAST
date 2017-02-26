@@ -14,4 +14,4 @@ plugin/theories/.ASTPlugin.aux
 plugin/theories/ASTPlugin.glob
 plugin/theories/ASTPlugin.v.d
 plugin/theories/ASTPlugin.vo
-
+plugin/Makefile.coq
