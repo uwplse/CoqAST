@@ -14,9 +14,8 @@ it prints an s-expression that represents the AST.
 
 For example:
 
-```Coq < PrintAST nat.
-(Ind ((Name nat) (inductive_body (O 1 (Var nat)) (S 2 (Prod (Anonymous) (Var nat) (Var nat))))))
-```
+    Coq < PrintAST nat.
+    (Ind ((Name nat) (inductive_body (O 1 (Var nat)) (S 2 (Prod (Anonymous) (Var nat) (Var nat))))))
 
 ## Using the Plugin
 
