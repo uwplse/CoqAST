@@ -542,10 +542,10 @@ let rec build_ast (env : Environ.env) (depth : int) (trm : types) =
       let c_b = build_ast env depth b in
       let branches = List.map (build_ast env depth) (Array.to_list e) in
       build_case ci c_a c_b branches
-  | Fix fp ->
-      build_fixpoint env depth fp
-  | CoFix cfp ->
-      build_cofixpoint env depth cfp
+  | Fix ((is, i), (ns, ts, ds)) ->
+      build_fix (build_fixpoint_functions env depth ns ts ds) i
+  | CoFix (i, (ns, ts, ds)) ->
+      build_cofix (build_fixpoint_functions env depth ns ts ds) i
   | _ ->
       build_unknown trm
 
@@ -563,29 +563,14 @@ and build_const (env : Environ.env) (depth : int) ((c, u) : pconstant) =
   | Some c ->
       build_definition kn (build_ast global_env depth c) u
 
-and build_fixpoint (env : Environ.env) (depth : int) (fp : (constr, types) pfixpoint) =
-  let ((indexes, index), (names, typs, defs)) = fp in
+and build_fixpoint_functions (env : Environ.env) (depth : int) (names : name array) (typs : constr array) (defs : constr array)  =
   let env_fix = Environ.push_rel_context (bindings_for_fix names typs) env in
-  let funs =
-    List.map
-      (fun i ->
-         let typ = build_ast env depth (Array.get typs i) in
-         let def = build_ast env_fix depth (Array.get defs i) in
-         build_fix_fun i (Array.get names i) typ def)
-      (range 0 (Array.length indexes))
-  in build_fix funs index
-
-and build_cofixpoint (env : Environ.env) (depth : int) (cfp : (constr, types) pcofixpoint) =
-  let (index, (names, typs, defs)) = cfp in
-  let env_cofix = Environ.push_rel_context (bindings_for_fix names typs) env in
-  let funs =
-    List.map
-      (fun i ->
-         let typ = build_ast env depth (Array.get typs i) in
-         let def = build_ast env_cofix depth (Array.get defs i) in
-         build_fix_fun i (Array.get names i) typ def)
-      (range 0 (Array.length names))
-  in build_cofix funs index
+  List.map
+    (fun i ->
+      let typ = build_ast env depth (Array.get typs i) in
+      let def = build_ast env_fix depth (Array.get defs i) in
+      build_fix_fun i (Array.get names i) typ def)
+    (range 0 (Array.length names))
 
 and build_oinductive (env : Environ.env) (depth : int) (ind_body : one_inductive_body) =
   let constrs =
