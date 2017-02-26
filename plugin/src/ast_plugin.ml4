@@ -531,10 +531,20 @@ let build_case (info : case_info) (case_typ_ast : string) (match_ast : string) (
   let branches = build "CaseBranches" branch_asts in
   build "Case" [num_args; case_typ_ast; match_typ; branches]
 
-(* --- Unknown type, not yet supported by plugin, but we can pretty-print --- *)
+(* --- Projections --- *)
 
-let build_unknown (trm : types) =
-  build "Unknown" [print_to_string pp_constr trm]
+(*
+ * A Proj is a constant that must be transparent
+ * From the projection element in the tuple, you can get a body (lookup_projection in the environment)
+ * You can also retrieve the underlying constant, which is what we do here for now
+ *
+ * If a Proj is just a constant, I have no clue why it has an extra 'constr in its type
+ * Submit a pull request if you figure it out
+ * I also haven't tested this yet so I don't know what it prints
+ *)
+
+let build_proj (p_const_ast : string) (c_ast : string) =
+  build "Proj" [p_const_ast; c_ast]
 
 (* --- Full AST --- *)
 
@@ -588,8 +598,10 @@ let rec build_ast (env : Environ.env) (depth : int) (trm : types) =
       build_fix (build_fixpoint_functions env depth ns ts ds) i
   | CoFix (i, (ns, ts, ds)) ->
       build_cofix (build_fixpoint_functions env depth ns ts ds) i
-  | _ ->
-      build_unknown trm
+  | Proj (p, c) ->
+      let p' = build_ast env depth (Term.mkConst (Projection.constant p)) in
+      let c' = build_ast env depth c in
+      build_proj p' c'
 
 and build_const (env : Environ.env) (depth : int) ((c, u) : pconstant) =
   let kn = Constant.canonical c in
