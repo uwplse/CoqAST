@@ -24,18 +24,18 @@ AST sometimes changes between Coq versions.
 
 To build:
 
-   cd plugin
-   make
+        cd plugin
+        make
 
 This should install it in your Coq directory. In CoqTop (or whichever IDE you use):
 
-   Coq < Require Import PrintAST.ASTPlugin.
-   [Loading ML file ast_plugin.cmxs ... done]
+      Coq < Require Import PrintAST.ASTPlugin.
+      [Loading ML file ast_plugin.cmxs ... done]
 
 To print:
 
-   Coq < PrintAST le.
-   (Ind ((Name le) (inductive_body (le_n 1 (Prod (Name n) (Var nat) (App (Var le) (Var n) (Var n)))) (le_S 2 (Prod (Name n) (Var nat) (Prod (Name m) (Var nat) (Prod (Anonymous) (App (Var le) (Var n) (Var m)) (App (Var le) (Var n) (App (Construct (Var nat) 2) (Var m))))))))))
+        Coq < PrintAST le.
+        (Ind ((Name le) (inductive_body (le_n 1 (Prod (Name n) (Var nat) (App (Var le) (Var n) (Var n)))) (le_S 2 (Prod (Name n) (Var nat) (Prod (Name m) (Var nat) (Prod (Anonymous) (App (Var le) (Var n) (Var m)) (App (Var le) (Var n) (App (Construct (Var nat) 2) (Var m))))))))))
 
 ### Toggling DeBruijn Indexing
 
