@@ -654,7 +654,7 @@ let print_ast (depth : int) (def : Constrexpr.constr_expr) =
 VERNAC COMMAND EXTEND Print_AST
 | [ "PrintAST" constr(def) ] ->
   [ print_ast 1 def ]
-| [ "PrintAST" constr(def) "with" "depth" string(depth)] ->
-  [ print_ast (int_of_string depth) def ]
+| [ "PrintAST" constr(def) "with" "depth" integer(depth)] ->
+  [ print_ast depth def ]
 END
 

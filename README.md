@@ -56,7 +56,7 @@ For universe-polymorphic constants, you can turn on printing universe instances:
 
 You can change the depth at which the plugin prints definitions:
 
-    Coq < PrintAST le with depth "2".
+    Coq < PrintAST le with depth 2.
     (Ind ((Name le) (inductive_body (le_n 1 (Prod (Name n) (Ind ((Name nat) (inductive_body (O 1 (Var nat)) (S 2 (Prod (Anonymous) (Var nat) (Var nat)))))) (App (Var le) (Var n) (Var n)))) (le_S 2 (Prod (Name n) (Ind ((Name nat) (inductive_body (O 1 (Var nat)) (S 2 (Prod (Anonymous) (Var nat) (Var nat)))))) (Prod (Name m) (Ind ((Name nat) (inductive_body (O 1 (Var nat)) (S 2 (Prod (Anonymous) (Var nat) (Var nat)))))) (Prod (Anonymous) (App (Var le) (Var n) (Var m)) (App (Var le) (Var n) (App (Construct (Ind ((Name nat) (inductive_body (O 1 (Var nat)) (S 2 (Prod (Anonymous) (Var nat) (Var nat)))))) 2) (Var m))))))))))
 
 # The Fun Part
