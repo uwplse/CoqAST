@@ -10,7 +10,7 @@ plugin/src/*.ml
 plugin/src/*.o
 plugin/src/*.ml4.d
 plugin/src/*.cmi
-plugin/theories/.ASTPlugin.aux
+plugin/theories/.ASTPlugin.vo.aux
 plugin/theories/ASTPlugin.glob
 plugin/theories/ASTPlugin.v.d
 plugin/theories/ASTPlugin.vo

@@ -5,6 +5,8 @@ open Format
 open Univ
 open Term
 open Names
+open Constrarg
+open Stdarg
 
 (*
  * Plugin to print an s-expression representing the (possibly expanded) AST for a definition.
@@ -53,7 +55,7 @@ let show_universes () = !opt_show_universes
  * Prints a string using the Coq pretty printer
  *)
 let print (s : string) =
-  Pp.pp (Pp.str s)
+  Feedback.msg_info (Pp.str s)
 
 (*
  * Using a supplied pretty printing function, prints directly to a string
@@ -174,7 +176,11 @@ let build_evar (k : existential_key) (c_asts : string list) =
  * The name may be Anonymous, in which case we print the index
  *)
 let build_rel_named (env : Environ.env) (i : int) =
-  let (name, body, typ) = Environ.lookup_rel i env in
+  let name =
+    match Environ.lookup_rel i env with
+      Context.Rel.Declaration.LocalAssum (n,_) -> n
+    | Context.Rel.Declaration.LocalDef (n,_,_) -> n
+  in
   match name with
     Name id -> build_var id
   | Anonymous -> build "Rel" [string_of_int i]
@@ -406,7 +412,7 @@ let build_definition (kn : kernel_name) (typ_ast : string) (u : Instance.t) =
 let bindings_for_fix (names : name array) (typs : constr array) =
   Array.to_list
     (CArray.map2_i
-      (fun i name typ -> (name, None, Vars.lift i typ))
+      (fun i name typ -> Context.Rel.Declaration.LocalAssum (name, Vars.lift i typ))
       names typs)
 
 (*
@@ -464,7 +470,7 @@ let bindings_for_inductive (env : Environ.env) (mutind_body : mutual_inductive_b
       let name_id = ind_body.mind_typename in
       let mutind_spec = (mutind_body, ind_body) in
       let typ = Inductive.type_of_inductive env (mutind_spec, univ_instance) in
-      (Names.Name name_id, None, typ))
+      Context.Rel.Declaration.LocalAssum (Names.Name name_id, typ))
     ind_bodies
 
 (*
@@ -567,16 +573,16 @@ let rec build_ast (env : Environ.env) (depth : int) (trm : types) =
       build_cast c' k t'
   | Prod (n, t, b) ->
       let t' = build_ast env depth t in
-      let b' = build_ast (Environ.push_rel (n, None, t) env) depth b in
+      let b' = build_ast (Environ.push_rel (Context.Rel.Declaration.LocalAssum (n, t)) env) depth b in
       build_product n t' b'
   | Lambda (n, t, b) ->
       let t' = build_ast env depth t in
-      let b' = build_ast (Environ.push_rel (n, None, t) env) depth b in
+      let b' = build_ast (Environ.push_rel (Context.Rel.Declaration.LocalAssum (n, t)) env) depth b in
       build_lambda n t' b'
   | LetIn (n, t, e, b) ->
       let t' = build_ast env depth t in
       let e' = build_ast env depth e in
-      let b' = build_ast (Environ.push_rel (n, Some e, t) env) depth b in
+      let b' = build_ast (Environ.push_rel (Context.Rel.Declaration.LocalDef (n, e, t)) env) depth b in
       build_let_in n t' e' b'
   | App (f, xs) ->
       let f' = build_ast env depth f in
@@ -651,10 +657,10 @@ let print_ast (depth : int) (def : Constrexpr.constr_expr) =
 
 (* PrintAST command
    The depth specifies the depth at which to unroll nested type definitions *)
-VERNAC COMMAND EXTEND Print_AST
-| [ "PrintAST" constr(def) ] ->
-  [ print_ast 1 def ]
-| [ "PrintAST" constr(def) "with" "depth" string(depth)] ->
-  [ print_ast (int_of_string depth) def ]
+VERNAC COMMAND EXTEND Print_AST CLASSIFIED AS QUERY
+| [ "PrintAST" constr(ref) ] ->
+  [ print_ast 1 ref ]
+| [ "PrintAST" constr(ref) "with" "depth" int(depth)] ->
+  [ print_ast depth ref ]
 END
 
