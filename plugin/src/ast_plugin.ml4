@@ -636,7 +636,7 @@ and build_oinductive (env : Environ.env) (depth : int) (ind_body : one_inductive
 and build_minductive (env : Environ.env) (depth : int) (((i, i_index), u) : pinductive) =
   let mutind_body = lookup_mutind_body i env in
   let ind_bodies = mutind_body.mind_packets in
-  if depth = 0 then (* don't expand *)
+  if depth <= 0 then (* don't expand *)
     build_inductive_name (Array.get ind_bodies i_index)
   else (* expand *)
     let ind_bodies_list = Array.to_list ind_bodies in
@@ -644,10 +644,29 @@ and build_minductive (env : Environ.env) (depth : int) (((i, i_index), u) : pind
     let cs = List.map (build_oinductive env_ind depth) ind_bodies_list in
     build_inductive cs u
 
+(* --- Top-level functionality --- *)
+
+(*
+ * Apply a function to a definition up to a certain depth
+ * That is, always unfold the first constructor or inductive definition
+ *)
+let apply_to_definition (f : Environ.env -> int -> types -> 'a) (env : Environ.env) (depth : int) (body : types) =
+  match (kind_of_term body) with
+  | Const (c, u) ->
+      let cd = Environ.lookup_constant c env in
+        begin
+          match get_definition cd with
+            None -> f env depth body
+          | Some c -> f env (depth - 1) c
+        end
+ | _ -> f env depth body
+
+(* Top-level print AST functionality *)
 let print_ast (depth : int) (def : Constrexpr.constr_expr) =
   let (evm, env) = Lemmas.get_current_context() in
   let (body, _) = Constrintern.interp_constr env evm def in
-  print (build_ast env depth body)
+  let ast = apply_to_definition build_ast env depth body in
+  print ast
 
 (* PrintAST command
    The depth specifies the depth at which to unroll nested type definitions *)
