@@ -648,18 +648,16 @@ and build_minductive (env : Environ.env) (depth : int) (((i, i_index), u) : pind
 
 (*
  * Apply a function to a definition up to a certain depth
- * That is, always unfold the first constructor or inductive definition
+ * That is, always unfold the first constant or inductive definition
  *)
 let apply_to_definition (f : Environ.env -> int -> types -> 'a) (env : Environ.env) (depth : int) (body : types) =
   match (kind_of_term body) with
-  | Const (c, u) ->
-      let cd = Environ.lookup_constant c env in
-        begin
-          match get_definition cd with
-            None -> f env depth body
-          | Some c -> f env (depth - 1) c
-        end
- | _ -> f env depth body
+  | Const _ ->
+      f env (depth + 1) body
+  | Ind _ ->
+      f env (depth + 1) body
+  | _ ->
+      f env depth body
 
 (* Top-level print AST functionality *)
 let print_ast (depth : int) (def : Constrexpr.constr_expr) =
@@ -672,7 +670,7 @@ let print_ast (depth : int) (def : Constrexpr.constr_expr) =
    The depth specifies the depth at which to unroll nested type definitions *)
 VERNAC COMMAND EXTEND Print_AST
 | [ "PrintAST" constr(def) ] ->
-  [ print_ast 1 def ]
+  [ print_ast 0 def ]
 | [ "PrintAST" constr(def) "with" "depth" integer(depth)] ->
   [ print_ast depth def ]
 END
