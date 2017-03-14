@@ -1,4 +1,4 @@
-all: plugin install
+default: plugin
 
 plugin: Makefile.coq
 	$(MAKE) -f Makefile.coq
@@ -15,7 +15,4 @@ clean:
 install:
 	$(MAKE) -f Makefile.coq install
 
-uninstall:
-	$(MAKE) -f Makefile.coq uninstall
-
-.PHONY: all plugin clean install uninstall
+.PHONY: default plugin clean install

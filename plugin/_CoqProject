@@ -1,5 +1,0 @@
--I src
--Q theories PrintAST
-
-src/ast_plugin.ml4
-theories/ASTPlugin.v
