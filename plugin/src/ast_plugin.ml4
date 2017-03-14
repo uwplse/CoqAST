@@ -253,11 +253,7 @@ let print_ast fmt (depth : int) (def : Constrexpr.constr_expr) =
   let (body, _) = Constrintern.interp_constr env evm def in
   let ast = apply_to_definition build_ast env depth body in
   pp_with fmt (str ast ++ str "\n");
-  Format.pp_print_flush fmt ();
-  if not (Int.equal (Buffer.length buf) 0) then begin
-    Pp.msg_notice (str (Buffer.contents buf));
-    Buffer.reset buf
-  end
+  Format.pp_print_flush fmt ()
 
 let formatter out =
   let fmt =
@@ -269,18 +265,22 @@ let formatter out =
   fmt
 
 VERNAC COMMAND EXTEND Print_AST
-| [ "PrintAST" constr(def) ] ->
+| [ "PrintAST" constr_list(cl) ] ->
   [
     let fmt = formatter None in
-    print_ast fmt 0 def
+    List.iter (fun def -> print_ast fmt 0 def) cl;
+    if not (Int.equal (Buffer.length buf) 0) then begin
+      Pp.msg_notice (str (Buffer.contents buf));
+      Buffer.reset buf
+    end
   ]
-| [ "PrintAST" string(f) constr(def) ] ->
+| [ "PrintAST" string(f) constr_list(cl) ] ->
   [
     let oc = open_out f in
     let fmt = formatter (Some oc) in
-    print_ast fmt 0 def;
-    Pp.msg_notice (str "wrote AST(s) to file: " ++ str f);
-    close_out oc
+    List.iter (fun def -> print_ast fmt 0 def) cl;
+    close_out oc;
+    Pp.msg_notice (str "wrote AST(s) to file: " ++ str f)
   ]
 END
 
