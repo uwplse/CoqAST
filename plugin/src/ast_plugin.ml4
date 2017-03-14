@@ -246,14 +246,41 @@ let apply_to_definition (f : Environ.env -> int -> types -> 'a) (env : Environ.e
   | _ ->
       f env depth body
 
-let print_ast (depth : int) (def : Constrexpr.constr_expr) =
+let buf = Buffer.create 1000
+
+let print_ast fmt (depth : int) (def : Constrexpr.constr_expr) =
   let (evm, env) = Lemmas.get_current_context() in
   let (body, _) = Constrintern.interp_constr env evm def in
   let ast = apply_to_definition build_ast env depth body in
-  Pp.msg_notice (str ast)
+  pp_with fmt (str ast ++ str "\n");
+  Format.pp_print_flush fmt ();
+  if not (Int.equal (Buffer.length buf) 0) then begin
+    Pp.msg_notice (str (Buffer.contents buf));
+    Buffer.reset buf
+  end
+
+let formatter out =
+  let fmt =
+    match out with
+    | Some oc -> Pp_control.with_output_to oc
+    | None -> Buffer.clear buf; Format.formatter_of_buffer buf
+  in
+  Format.pp_set_max_boxes fmt max_int;
+  fmt
 
 VERNAC COMMAND EXTEND Print_AST
 | [ "PrintAST" constr(def) ] ->
-  [ print_ast 0 def ]
+  [
+    let fmt = formatter None in
+    print_ast fmt 0 def
+  ]
+| [ "PrintAST" string(f) constr(def) ] ->
+  [
+    let oc = open_out f in
+    let fmt = formatter (Some oc) in
+    print_ast fmt 0 def;
+    Pp.msg_notice (str "wrote AST(s) to file: " ++ str f);
+    close_out oc
+  ]
 END
 
