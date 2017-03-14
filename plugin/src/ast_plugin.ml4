@@ -5,14 +5,7 @@ open Format
 open Univ
 open Term
 open Names
-
-(* util *)
-
-let print (s : string) =
-  Pp.pp (Pp.str s)
-
-let print_to_string (pp : formatter -> 'a -> unit) (trm : 'a) =
-  Format.asprintf "%a" pp trm
+open Pp
 
 let wrap (s : string) =
   String.concat "" ["(" ; s ; ")"]
@@ -21,10 +14,7 @@ let build (node : string) (leaves : string list) =
   wrap (String.concat " " (node :: leaves))
 
 let rec range (min : int) (max : int) =
-  if min < max then
-    min :: range (min + 1) max
-  else
-    []
+  if min < max then min :: range (min + 1) max else []
 
 let build_name (n : name) =
   match n with
@@ -210,7 +200,6 @@ let rec build_ast (env : Environ.env) (depth : int) (trm : types) =
       let p' = build_ast env depth (Term.mkConst (Projection.constant p)) in
       let c' = build_ast env depth c in
       build_proj p' c'
-
 and build_const (env : Environ.env) (depth : int) ((c, u) : pconstant) =
   let kn = Constant.canonical c in
   let cd = Environ.lookup_constant c env in
@@ -224,7 +213,6 @@ and build_const (env : Environ.env) (depth : int) ((c, u) : pconstant) =
       end
   | Some c ->
       build_definition kn (build_ast global_env (depth - 1) c) u
-
 and build_fixpoint_functions (env : Environ.env) (depth : int) (names : name array) (typs : constr array) (defs : constr array)  =
   let env_fix = Environ.push_rel_context (bindings_for_fix names typs) env in
   List.map
@@ -233,14 +221,11 @@ and build_fixpoint_functions (env : Environ.env) (depth : int) (names : name arr
       let def = build_ast env_fix depth (Array.get defs i) in
       build_fix_fun i (Array.get names i) typ def)
     (range 0 (Array.length names))
-
 and build_oinductive (env : Environ.env) (depth : int) (ind_body : one_inductive_body) =
   let constrs =
-    List.map
-      (fun (i, (n, typ)) -> build (Names.string_of_id n) [i; build_ast env (depth - 1) typ])
-    (named_constructors ind_body)
+    List.map (fun (i, (n, typ)) -> build (Names.string_of_id n) [i; build_ast env (depth - 1) typ])
+      (named_constructors ind_body)
   in build (build "Name" [Names.string_of_id ind_body.mind_typename]) [build_inductive_body constrs]
-
 and build_minductive (env : Environ.env) (depth : int) (((i, i_index), u) : pinductive) =
   let mutind_body = lookup_mutind_body i env in
   let ind_bodies = mutind_body.mind_packets in
@@ -253,7 +238,7 @@ and build_minductive (env : Environ.env) (depth : int) (((i, i_index), u) : pind
     build_inductive cs u
 
 let apply_to_definition (f : Environ.env -> int -> types -> 'a) (env : Environ.env) (depth : int) (body : types) =
-  match (kind_of_term body) with
+  match kind_of_term body with
   | Const _ ->
       f env (depth + 1) body
   | Ind _ ->
@@ -265,12 +250,10 @@ let print_ast (depth : int) (def : Constrexpr.constr_expr) =
   let (evm, env) = Lemmas.get_current_context() in
   let (body, _) = Constrintern.interp_constr env evm def in
   let ast = apply_to_definition build_ast env depth body in
-  print ast
+  Pp.msg_notice (str ast)
 
 VERNAC COMMAND EXTEND Print_AST
 | [ "PrintAST" constr(def) ] ->
   [ print_ast 0 def ]
-| [ "PrintAST" constr(def) "with" "depth" integer(depth)] ->
-  [ print_ast depth def ]
 END
 
