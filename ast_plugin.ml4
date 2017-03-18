@@ -243,6 +243,20 @@ VERNAC COMMAND EXTEND Print_AST
       Buffer.reset buf
     end
   ]
+| [ "PrintASTHash" constr(c) ] ->
+  [
+    let fmt = formatter None in
+    let (evm, env) = Lemmas.get_current_context () in
+    let (t, _) = Constrintern.interp_constr env evm c in
+    let ast = build_ast (Global.env ()) 1 t in
+    let h = Hashtbl.hash ast in
+    pp_with fmt (str (string_of_int h));
+    Format.pp_print_flush fmt ();
+    if not (Int.equal (Buffer.length buf) 0) then begin
+      Pp.msg_notice (str (Buffer.contents buf));
+      Buffer.reset buf
+    end
+  ]
 (*| [ "PrintAST" string(f) constr(c) ] ->
   [
     let oc = open_out f in
