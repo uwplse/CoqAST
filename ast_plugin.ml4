@@ -185,7 +185,7 @@ and build_const (env : Environ.env) (depth : int) ((c, _) : pconstant) =
 	| TemplateArity _ -> assert false
       end
     | Some t ->
-      build_ast env (depth - 1) t
+      Node ("Const", [build_ast env (depth - 1) t])
 and build_fixpoint_functions (env : Environ.env) (depth : int) (names : name array) (typs : constr array) (defs : constr array)  =
   let env_fix = Environ.push_rel_context (bindings_for_fix names typs) env in
   List.map
@@ -194,12 +194,16 @@ and build_fixpoint_functions (env : Environ.env) (depth : int) (names : name arr
       build_fix_fun i def)
     (range 0 (Array.length names))
 and build_minductive (env : Environ.env) (depth : int) (((i, i_index), _) : pinductive) =
-  let mutind_body = Environ.lookup_mind i env in
-  let ind_bodies = mutind_body.mind_packets in
-  let ind_bodies_list = Array.to_list ind_bodies in
-  let env_ind = Environ.push_rel_context (bindings_for_inductive env mutind_body ind_bodies_list) env in
-  let cs = List.map (build_oinductive env_ind depth) ind_bodies_list in
-  Node ("MInd", cs)
+  if depth <= 0 then (* don't expand *)
+    let kn = Names.canonical_mind i in
+    Node ("MInd", [Leaf (string_of_kn kn)])
+  else (* expand *)
+    let mutind_body = Environ.lookup_mind i env in
+    let ind_bodies = mutind_body.mind_packets in
+    let ind_bodies_list = Array.to_list ind_bodies in
+    let env_ind = Environ.push_rel_context (bindings_for_inductive env mutind_body ind_bodies_list) env in
+    let cs = List.map (build_oinductive env_ind depth) ind_bodies_list in
+    Node ("MInd", cs)
 and build_oinductive (env : Environ.env) (depth : int) (ind_body : one_inductive_body) =
   let constrs =
     List.map (fun (i, (n, typ)) -> Node ("Cons", [Leaf i; Leaf (Names.string_of_id n); build_ast env (depth - 1) typ])) (named_constructors ind_body)
