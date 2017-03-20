@@ -218,6 +218,16 @@ match a with
   let s = String.concat " " sl in
   Printf.sprintf "(%s %s)" h s
 
+let md5 s =
+  Digest.to_hex (Digest.string s)
+
+let rec md5_of_ast a =
+match a with
+| Leaf v -> md5 v
+| Node (v, l) ->
+  let ls = v :: List.map md5_of_ast l in
+  md5 (String.concat "" ls)
+
 let buf = Buffer.create 1000
 
 let formatter out =
@@ -243,14 +253,14 @@ VERNAC COMMAND EXTEND Print_AST
       Buffer.reset buf
     end
   ]
-| [ "PrintASTHash" constr(c) ] ->
+| [ "PrintAST" "MD5" constr(c) ] ->
   [
     let fmt = formatter None in
     let (evm, env) = Lemmas.get_current_context () in
     let (t, _) = Constrintern.interp_constr env evm c in
     let ast = build_ast (Global.env ()) 1 t in
-    let h = Hashtbl.hash ast in
-    pp_with fmt (str (string_of_int h));
+    let digest = md5_of_ast ast in
+    pp_with fmt (str digest);
     Format.pp_print_flush fmt ();
     if not (Int.equal (Buffer.length buf) 0) then begin
       Pp.msg_notice (str (Buffer.contents buf));
