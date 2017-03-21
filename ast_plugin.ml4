@@ -117,7 +117,7 @@ let named_constructors (ind_body : one_inductive_body) =
   let constrs = Array.to_list ind_body.mind_user_lc in
   List.combine indexes (List.combine constr_names constrs)
 
-let rec build_ast (env : Environ.env) (depth : int) (trm : types) =
+let rec build_ast (env : Environ.env) (depth : int) (trm : constr) =
   match kind_of_term trm with
   | Rel i ->
     build_rel env i
@@ -196,7 +196,7 @@ and build_fixpoint_functions (env : Environ.env) (depth : int) (names : name arr
 and build_minductive (env : Environ.env) (depth : int) (((i, i_index), _) : pinductive) =
   if depth <= 0 then (* don't expand *)
     let kn = Names.canonical_mind i in
-    Node ("MInd", [Leaf (string_of_kn kn)])
+    Node ("MInd", [Leaf (string_of_kn kn); Leaf (string_of_int i_index)])
   else (* expand *)
     let mutind_body = Environ.lookup_mind i env in
     let ind_bodies = mutind_body.mind_packets in
@@ -218,15 +218,25 @@ match a with
   let s = String.concat " " sl in
   Printf.sprintf "(%s %s)" h s
 
-let md5 s =
-  Digest.to_hex (Digest.string s)
-
-let rec md5_of_ast a =
+let rec hash_of_ast hash a =
 match a with
-| Leaf v -> md5 v
+| Leaf v -> hash v
 | Node (v, l) ->
-  let ls = v :: List.map md5_of_ast l in
-  md5 (String.concat "" ls)
+  let ls = v :: List.map (hash_of_ast hash) l in
+  hash (String.concat "" ls)
+
+let digest s = Digest.to_hex (Digest.string s)
+
+let digest_of_ast = hash_of_ast digest
+
+let string_of_gref gref =
+  match gref with
+  | Globnames.VarRef _ -> ""
+  | Globnames.ConstRef cst ->
+    Names.string_of_kn (Names.canonical_con cst)
+  | Globnames.IndRef (kn,_) ->
+    Names.string_of_kn (Names.canonical_mind kn)
+  | Globnames.ConstructRef _ -> ""
 
 let buf = Buffer.create 1000
 
@@ -239,40 +249,93 @@ let formatter out =
   Format.pp_set_max_boxes fmt max_int;
   fmt
 
+let print_ast fmt gref t =
+  let ast = build_ast (Global.env ()) 1 t in
+  let s = Printf.sprintf "%s: %s\n" (string_of_gref gref) (string_of_ast ast) in
+  pp_with fmt (str s)
+
+let print_ast_type_digest fmt gref t_type delim =
+  let type_ast = build_ast (Global.env ()) 1 t_type in
+  let type_digest = digest_of_ast type_ast in
+  let s = Printf.sprintf
+    "%s { \"name\": \"%s\", \"typeDigest\": \"%s\" }"
+    !delim (string_of_gref gref) type_digest
+  in
+  pp_with fmt (str s);
+  delim := ",\n"
+
+let print_ast_body_digest fmt gref t_body delim =
+  let body_ast = build_ast (Global.env ()) 1 t_body in
+  let body_digest = digest_of_ast body_ast in
+  let s = Printf.sprintf
+    "%s { \"name\": \"%s\", \"bodyDigest\": \"%s\" }"
+    !delim (string_of_gref gref) body_digest
+  in
+  pp_with fmt (str s);
+  delim := ",\n"
+
+let print_ast_all_digest fmt gref t_type t_body delim =
+  let type_ast = build_ast (Global.env ()) 1 t_type in
+  let body_ast = build_ast (Global.env ()) 1 t_body in
+  let type_digest = digest_of_ast type_ast in
+  let body_digest = digest_of_ast body_ast in
+  let s = Printf.sprintf
+    "%s { \"name\": \"%s\", \"typeDigest\": \"%s\", \"bodyDigest\": \"%s\" }"
+    !delim (string_of_gref gref) type_digest body_digest
+  in
+  pp_with fmt (str s);
+  delim := ",\n"
+
+let print_ast_of_gref fmt gref =
+  match gref with
+  | Globnames.VarRef _ -> ()
+  | Globnames.ConstRef cst ->
+    let t = mkConst cst in
+    print_ast fmt gref t
+  | Globnames.IndRef i ->
+    let t = mkInd i in
+    print_ast fmt gref t
+  | Globnames.ConstructRef _ -> ()
+
+let print_digest_of_gref fmt gref delim =
+  match gref with
+  | Globnames.VarRef _ -> ()
+  | Globnames.ConstRef cst ->
+    let t_body = mkConst cst in
+    let cb = Environ.lookup_constant cst (Global.env()) in
+    begin match cb.Declarations.const_type with
+    | Declarations.RegularArity t_type ->
+      print_ast_all_digest fmt gref t_type t_body delim
+    | Declarations.TemplateArity _ ->
+      print_ast_body_digest fmt gref t_body delim
+    end
+  | Globnames.IndRef i ->
+    let t_body = mkInd i in
+    print_ast_body_digest fmt gref t_body delim
+  | Globnames.ConstructRef _ -> ()
+
 VERNAC COMMAND EXTEND Print_AST
-| [ "PrintAST" constr(c) ] ->
+| [ "AST" reference_list(rl) ] ->
   [
     let fmt = formatter None in
-    let (evm, env) = Lemmas.get_current_context () in
-    let (t, _) = Constrintern.interp_constr env evm c in
-    let ast = build_ast (Global.env ()) 1 t in
-    pp_with fmt (str (string_of_ast ast));
+    List.iter (fun ref -> print_ast_of_gref fmt (Nametab.global ref)) rl;
     Format.pp_print_flush fmt ();
     if not (Int.equal (Buffer.length buf) 0) then begin
       Pp.msg_notice (str (Buffer.contents buf));
       Buffer.reset buf
     end
   ]
-| [ "PrintAST" "MD5" constr(c) ] ->
+| [ "Digest" "MD5" reference_list(rl) ] ->
   [
     let fmt = formatter None in
-    let (evm, env) = Lemmas.get_current_context () in
-    let (t, _) = Constrintern.interp_constr env evm c in
-    let ast = build_ast (Global.env ()) 1 t in
-    let digest = md5_of_ast ast in
-    pp_with fmt (str digest);
+    let delim = ref "" in
+    pp_with fmt (str "[\n");
+    List.iter (fun ref -> print_digest_of_gref fmt (Nametab.global ref) delim) rl;
+    pp_with fmt (str "\n]\n");
     Format.pp_print_flush fmt ();
     if not (Int.equal (Buffer.length buf) 0) then begin
       Pp.msg_notice (str (Buffer.contents buf));
       Buffer.reset buf
     end
   ]
-(*| [ "PrintAST" string(f) constr(c) ] ->
-  [
-    let oc = open_out f in
-    let fmt = formatter (Some oc) in
-    List.iter (fun def -> print_ast fmt 0 def) cl;
-    close_out oc;
-    Pp.msg_notice (str "wrote AST(s) to file: " ++ str f)
-  ]*)
 END
