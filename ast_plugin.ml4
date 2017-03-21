@@ -325,6 +325,15 @@ VERNAC COMMAND EXTEND Print_AST
       Buffer.reset buf
     end
   ]
+| [ "AST" string(f) reference_list(rl) ] ->
+  [
+    let oc = open_out f in
+    let fmt = formatter (Some oc) in
+    List.iter (fun ref -> print_ast_of_gref fmt (Nametab.global ref)) rl;
+    Format.pp_print_flush fmt ();
+    close_out oc;
+    Pp.msg_notice (str "wrote ASTs to file: " ++ str f)
+  ]
 | [ "Digest" "MD5" reference_list(rl) ] ->
   [
     let fmt = formatter None in
@@ -337,5 +346,17 @@ VERNAC COMMAND EXTEND Print_AST
       Pp.msg_notice (str (Buffer.contents buf));
       Buffer.reset buf
     end
+  ]
+| [ "Digest" "MD5" string(f) reference_list(rl) ] ->
+  [
+    let oc = open_out f in
+    let fmt = formatter (Some oc) in
+    let delim = ref "" in
+    pp_with fmt (str "[\n");
+    List.iter (fun ref -> print_digest_of_gref fmt (Nametab.global ref) delim) rl;
+    pp_with fmt (str "\n]\n");
+    Format.pp_print_flush fmt ();
+    close_out oc;
+    Pp.msg_notice (str "wrote digests to file: " ++ str f)
   ]
 END
