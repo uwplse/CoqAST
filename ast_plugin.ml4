@@ -253,6 +253,36 @@ let get_dirlist_grefs dirlist =
     Search.generic_search None select;
     !selected_gref
 
+let is_prop gref =
+  try
+    let glob = Glob_term.GRef(Loc.ghost, gref, None) in
+    let env = Global.env() in
+    let sigma = Evd.from_env env in
+    let sigma', c = Pretyping.understand_tcc env sigma glob in
+    let sigma2 = Evarconv.consider_remaining_unif_problems env sigma' in
+    let sigma3, nf = Evarutil.nf_evars_and_universes sigma2 in
+    let pl, uctx = Evd.universe_context sigma3 in
+    let env2 = Environ.push_context uctx (Evarutil.nf_env_evar sigma3 env) in
+    let c2 = nf c in
+    let t = Environ.j_type (Typeops.infer env2 c2) in
+    let t2 = Environ.j_type (Typeops.infer env2 t) in
+    Term.is_Prop t2
+  with _ ->
+    begin
+      Pp.msg_error (str "unable to determine the type of the type for ref");
+      false
+    end
+
+let is_opaque gref =
+  match gref with
+  | Globnames.VarRef _ -> false
+  | Globnames.ConstRef cst ->
+    let cb = Environ.lookup_constant cst (Global.env ()) in
+    (match cb.Declarations.const_body with
+    | Declarations.OpaqueDef _ -> true
+    | _ -> false)
+  | Globnames.IndRef _ | Globnames.ConstructRef _ -> false
+
 let buf = Buffer.create 1000
 
 let formatter out =
@@ -273,8 +303,8 @@ let print_ast_type_digest fmt gref t_type delim =
   let type_ast = build_ast (Global.env ()) 1 t_type in
   let type_digest = digest_of_ast type_ast in
   let s = Printf.sprintf
-    "%s { \"name\": \"%s\", \"typeDigest\": \"%s\" }"
-    !delim (string_of_gref gref) type_digest
+    "%s { \"name\": \"%s\", \"isProp\": %B, \"isOpaque\": %B, \"typeDigest\": \"%s\" }"
+    !delim (string_of_gref gref)  (is_prop gref) (is_opaque gref) type_digest
   in
   pp_with fmt (str s);
   delim := ",\n"
@@ -283,8 +313,8 @@ let print_ast_body_digest fmt gref t_body delim =
   let body_ast = build_ast (Global.env ()) 1 t_body in
   let body_digest = digest_of_ast body_ast in
   let s = Printf.sprintf
-    "%s { \"name\": \"%s\", \"bodyDigest\": \"%s\" }"
-    !delim (string_of_gref gref) body_digest
+    "%s { \"name\": \"%s\", \"isProp\": %B, \"isOpaque\": %B, \"bodyDigest\": \"%s\" }"
+    !delim (string_of_gref gref) (is_prop gref) (is_opaque gref) body_digest
   in
   pp_with fmt (str s);
   delim := ",\n"
@@ -295,8 +325,8 @@ let print_ast_all_digest fmt gref t_type t_body delim =
   let type_digest = digest_of_ast type_ast in
   let body_digest = digest_of_ast body_ast in
   let s = Printf.sprintf
-    "%s { \"name\": \"%s\", \"typeDigest\": \"%s\", \"bodyDigest\": \"%s\" }"
-    !delim (string_of_gref gref) type_digest body_digest
+    "%s { \"name\": \"%s\", \"isProp\": %B, \"isOpaque\": %B, \"typeDigest\": \"%s\", \"bodyDigest\": \"%s\" }"
+    !delim (string_of_gref gref) (is_prop gref) (is_opaque gref) type_digest body_digest
   in
   pp_with fmt (str s);
   delim := ",\n"
