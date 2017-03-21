@@ -238,6 +238,21 @@ let string_of_gref gref =
     Names.string_of_kn (Names.canonical_mind kn)
   | Globnames.ConstructRef _ -> ""
 
+let locate_mp_dirpath ref =
+  let (loc,qid) = Libnames.qualid_of_reference ref in
+  try Nametab.dirpath_of_module (Nametab.locate_module qid)
+  with Not_found ->
+    Errors.user_err_loc (loc, "", str "Unknown module " ++ Libnames.pr_qualid qid)
+
+let get_dirlist_grefs dirlist =
+  let selected_gref = ref [] in
+  let select gref env constr =
+    if Search.module_filter (dirlist, false) gref env constr
+    then selected_gref := gref :: !selected_gref
+  in
+    Search.generic_search None select;
+    !selected_gref
+
 let buf = Buffer.create 1000
 
 let formatter out =
@@ -332,7 +347,7 @@ VERNAC COMMAND EXTEND Print_AST
     List.iter (fun ref -> print_ast_of_gref fmt (Nametab.global ref)) rl;
     Format.pp_print_flush fmt ();
     close_out oc;
-    Pp.msg_notice (str "wrote ASTs to file: " ++ str f)
+    Pp.msg_notice (str "wrote AST(s) to file: " ++ str f)
   ]
 | [ "Digest" "MD5" reference_list(rl) ] ->
   [
@@ -357,6 +372,58 @@ VERNAC COMMAND EXTEND Print_AST
     pp_with fmt (str "\n]\n");
     Format.pp_print_flush fmt ();
     close_out oc;
-    Pp.msg_notice (str "wrote digests to file: " ++ str f)
+    Pp.msg_notice (str "wrote digest(s) to file: " ++ str f)
+  ]
+| [ "ModuleAST" reference_list(rl) ] ->
+  [
+    let fmt = formatter None in
+    let dirlist = List.map locate_mp_dirpath rl in
+    let grefs = get_dirlist_grefs dirlist in
+    List.iter (fun gref -> print_ast_of_gref fmt gref) grefs;
+    Format.pp_print_flush fmt ();
+    if not (Int.equal (Buffer.length buf) 0) then begin
+      Pp.msg_notice (str (Buffer.contents buf));
+      Buffer.reset buf
+    end
+  ]
+| [ "ModuleAST" string(f) reference_list(rl) ] ->
+  [
+    let oc = open_out f in
+    let fmt = formatter (Some oc) in
+    let dirlist = List.map locate_mp_dirpath rl in
+    let grefs = get_dirlist_grefs dirlist in
+    List.iter (fun gref -> print_ast_of_gref fmt gref) grefs;
+    Format.pp_print_flush fmt ();
+    close_out oc;
+    Pp.msg_notice (str "wrote AST(s) to file: " ++ str f)
+  ]
+| [ "ModuleDigest" "MD5" reference_list(rl) ] ->
+  [
+    let fmt = formatter None in
+    let delim = ref "" in
+    let dirlist = List.map locate_mp_dirpath rl in
+    let grefs = get_dirlist_grefs dirlist in
+    pp_with fmt (str "[\n");
+    List.iter (fun gref -> print_digest_of_gref fmt gref delim) grefs;
+    pp_with fmt (str "\n]\n");
+    Format.pp_print_flush fmt ();
+    if not (Int.equal (Buffer.length buf) 0) then begin
+      Pp.msg_notice (str (Buffer.contents buf));
+      Buffer.reset buf
+    end
+  ]
+| [ "ModuleDigest" "MD5" string(f) reference_list(rl) ] ->
+  [
+    let oc = open_out f in
+    let fmt = formatter (Some oc) in
+    let delim = ref "" in
+    let dirlist = List.map locate_mp_dirpath rl in
+    let grefs = get_dirlist_grefs dirlist in
+    pp_with fmt (str "[\n");
+    List.iter (fun gref -> print_digest_of_gref fmt gref delim) grefs;
+    pp_with fmt (str "\n]\n");
+    Format.pp_print_flush fmt ();
+    close_out oc;
+    Pp.msg_notice (str "wrote digest(s) to file: " ++ str f)
   ]
 END
