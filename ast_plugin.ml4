@@ -359,6 +359,26 @@ let print_digest_of_gref fmt gref delim =
     print_ast_body_digest fmt gref t_body delim
   | Globnames.ConstructRef _ -> ()
 
+let print_vio_digest_of_gref fmt gref delim =
+  match gref with
+  | Globnames.VarRef _ -> ()
+  | Globnames.ConstRef cst ->
+    let t_body = mkConst cst in
+    let cb = Environ.lookup_constant cst (Global.env()) in
+    begin match cb.Declarations.const_type with
+    | Declarations.RegularArity t_type ->
+      if is_prop gref && is_opaque gref then
+	print_ast_type_digest fmt gref t_type delim
+      else
+	print_ast_all_digest fmt gref t_type t_body delim
+    | Declarations.TemplateArity _ ->
+      print_ast_body_digest fmt gref t_body delim
+    end
+  | Globnames.IndRef i ->
+    let t_body = mkInd i in
+    print_ast_body_digest fmt gref t_body delim
+  | Globnames.ConstructRef _ -> ()
+
 VERNAC COMMAND EXTEND Print_AST
 | [ "AST" reference_list(rl) ] ->
   [
@@ -442,6 +462,21 @@ VERNAC COMMAND EXTEND Print_AST
       Buffer.reset buf
     end
   ]
+| [ "ModuleDigest" "VIO" "MD5" reference_list(rl) ] ->
+  [
+    let fmt = formatter None in
+    let delim = ref "" in
+    let dirlist = List.map locate_mp_dirpath rl in
+    let grefs = get_dirlist_grefs dirlist in
+    pp_with fmt (str "[\n");
+    List.iter (fun gref -> print_vio_digest_of_gref fmt gref delim) grefs;
+    pp_with fmt (str "\n]\n");
+    Format.pp_print_flush fmt ();
+    if not (Int.equal (Buffer.length buf) 0) then begin
+      Pp.msg_notice (str (Buffer.contents buf));
+      Buffer.reset buf
+    end
+  ]
 | [ "ModuleDigest" "MD5" string(f) reference_list(rl) ] ->
   [
     let oc = open_out f in
@@ -451,6 +486,20 @@ VERNAC COMMAND EXTEND Print_AST
     let grefs = get_dirlist_grefs dirlist in
     pp_with fmt (str "[\n");
     List.iter (fun gref -> print_digest_of_gref fmt gref delim) grefs;
+    pp_with fmt (str "\n]\n");
+    Format.pp_print_flush fmt ();
+    close_out oc;
+    Pp.msg_notice (str "wrote digest(s) to file: " ++ str f)
+  ]
+| [ "ModuleDigest" "VIO" "MD5" string(f) reference_list(rl) ] ->
+  [
+    let oc = open_out f in
+    let fmt = formatter (Some oc) in
+    let delim = ref "" in
+    let dirlist = List.map locate_mp_dirpath rl in
+    let grefs = get_dirlist_grefs dirlist in
+    pp_with fmt (str "[\n");
+    List.iter (fun gref -> print_vio_digest_of_gref fmt gref delim) grefs;
     pp_with fmt (str "\n]\n");
     Format.pp_print_flush fmt ();
     close_out oc;
