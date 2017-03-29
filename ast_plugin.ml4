@@ -76,6 +76,7 @@ let build_construct ((k,i):Names.inductive) (index : int) =
   let kn = Names.canonical_mind k in
   Node ("Construct", [Leaf (Names.string_of_kn kn); Leaf (string_of_int index)])
 
+(* use cb.body_of_constant_body? *)
 let get_definition (cb : Declarations.constant_body) =
   match cb.const_body with
   | Undef _ ->
@@ -367,7 +368,7 @@ let print_vio_digest_of_gref fmt gref delim =
     let cb = Environ.lookup_constant cst (Global.env()) in
     begin match cb.Declarations.const_type with
     | Declarations.RegularArity t_type ->
-      if is_prop gref && is_opaque gref then
+      if is_opaque gref then
 	print_ast_type_digest fmt gref t_type delim
       else
 	print_ast_all_digest fmt gref t_type t_body delim
