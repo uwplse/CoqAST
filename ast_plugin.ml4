@@ -301,7 +301,7 @@ let print_ast fmt gref t =
   pp_with fmt (str s)
 
 let print_ast_type_digest fmt gref t_type delim =
-  let type_ast = build_ast (Global.env ()) 1 t_type in
+  let type_ast = build_ast (Global.env ()) 0 t_type in
   let type_digest = digest_of_ast type_ast in
   let s = Printf.sprintf
     "%s { \"name\": \"%s\", \"isProp\": %B, \"isOpaque\": %B, \"typeDigest\": \"%s\" }"
@@ -321,7 +321,7 @@ let print_ast_body_digest fmt gref t_body delim =
   delim := ",\n"
 
 let print_ast_all_digest fmt gref t_type t_body delim =
-  let type_ast = build_ast (Global.env ()) 1 t_type in
+  let type_ast = build_ast (Global.env ()) 0 t_type in
   let body_ast = build_ast (Global.env ()) 1 t_body in
   let type_digest = digest_of_ast type_ast in
   let body_digest = digest_of_ast body_ast in
@@ -424,6 +424,19 @@ VERNAC COMMAND EXTEND Print_AST
     Format.pp_print_flush fmt ();
     close_out oc;
     Pp.msg_notice (str "wrote digest(s) to file: " ++ str f)
+  ]
+| [ "Digest" "VIO" "MD5" reference_list(rl) ] ->
+  [
+    let fmt = formatter None in
+    let delim = ref "" in
+    pp_with fmt (str "[\n");
+    List.iter (fun ref -> print_vio_digest_of_gref fmt (Nametab.global ref) delim) rl;
+    pp_with fmt (str "\n]\n");
+    Format.pp_print_flush fmt ();
+    if not (Int.equal (Buffer.length buf) 0) then begin
+      Pp.msg_notice (str (Buffer.contents buf));
+      Buffer.reset buf
+    end
   ]
 | [ "ModuleAST" reference_list(rl) ] ->
   [
