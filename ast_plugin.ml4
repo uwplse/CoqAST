@@ -343,6 +343,19 @@ let print_ast_of_gref fmt gref =
     print_ast fmt gref t
   | Globnames.ConstructRef _ -> ()
 
+let print_ast_of_gref_type fmt gref =
+  match gref with
+  | Globnames.ConstRef cst ->
+    let cb = Environ.lookup_constant cst (Global.env()) in
+    begin match cb.Declarations.const_type with
+    | Declarations.RegularArity t ->
+      let ast = build_ast (Global.env ()) 0 t in
+      let s = Printf.sprintf "%s: %s\n" (string_of_gref gref) (string_of_ast ast) in
+      pp_with fmt (str s)
+    | Declarations.TemplateArity _ -> ()
+    end
+  | _ -> ()
+
 let print_digest_of_gref fmt gref delim =
   match gref with
   | Globnames.VarRef _ -> ()
@@ -391,11 +404,30 @@ VERNAC COMMAND EXTEND Print_AST
       Buffer.reset buf
     end
   ]
+| [ "TypeAST" reference_list(rl) ] ->
+  [
+    let fmt = formatter None in
+    List.iter (fun ref -> print_ast_of_gref_type fmt (Nametab.global ref)) rl;
+    Format.pp_print_flush fmt ();
+    if not (Int.equal (Buffer.length buf) 0) then begin
+      Pp.msg_notice (str (Buffer.contents buf));
+      Buffer.reset buf
+    end
+  ]
 | [ "AST" string(f) reference_list(rl) ] ->
   [
     let oc = open_out f in
     let fmt = formatter (Some oc) in
     List.iter (fun ref -> print_ast_of_gref fmt (Nametab.global ref)) rl;
+    Format.pp_print_flush fmt ();
+    close_out oc;
+    Pp.msg_notice (str "wrote AST(s) to file: " ++ str f)
+  ]
+| [ "TypeAST" string(f) reference_list(rl) ] ->
+  [
+    let oc = open_out f in
+    let fmt = formatter (Some oc) in
+    List.iter (fun ref -> print_ast_of_gref_type fmt (Nametab.global ref)) rl;
     Format.pp_print_flush fmt ();
     close_out oc;
     Pp.msg_notice (str "wrote AST(s) to file: " ++ str f)
