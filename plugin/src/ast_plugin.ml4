@@ -175,9 +175,7 @@ let build_evar (k : existential_key) (c_asts : string list) =
  *)
 let build_rel_named (env : Environ.env) (i : int) =
   let (name, body, typ) = Environ.lookup_rel i env in
-  match name with
-    Name id -> build_var id
-  | Anonymous -> build "Rel" [string_of_int i]
+  build_name name
 
 (*
  * Build an AST for a Rel
@@ -450,7 +448,7 @@ let lookup_mutind_body (i : mutual_inductive) (env : Environ.env) =
  *)
 let build_inductive_name (ind_body : one_inductive_body) =
   let name_id = ind_body.mind_typename in
-  build_var name_id
+  build_name (Names.Name name_id)
 
 (*
  * Inductive types also create bindings that we need to push to the environment
