@@ -319,8 +319,8 @@ let build_lambda (n : name) (typ_ast : string) (body_ast : string) =
 (*
  * Build the AST for a let expression
  *)
-let build_let_in (n : name) (typ_ast : string) (expr_ast : string) (body_ast : string) =
-  build "LetIn" [build_name n; typ_ast; expr_ast; body_ast]
+let build_let_in (n : name) (trm_ast : string) (typ_ast : string) (body_ast : string) =
+  build "LetIn" [build_name n; trm_ast; typ_ast; body_ast]
 
 (* --- Application --- *)
 
@@ -573,11 +573,11 @@ let rec build_ast (env : Environ.env) (depth : int) (trm : types) =
       let t' = build_ast env depth t in
       let b' = build_ast (Environ.push_rel (n, None, t) env) depth b in
       build_lambda n t' b'
-  | LetIn (n, t, e, b) ->
-      let t' = build_ast env depth t in
-      let e' = build_ast env depth e in
-      let b' = build_ast (Environ.push_rel (n, Some e, t) env) depth b in
-      build_let_in n t' e' b'
+  | LetIn (n, trm, typ, b) ->
+      let trm' = build_ast env depth trm in
+      let typ' = build_ast env depth typ in
+      let b' = build_ast (Environ.push_rel (n, Some b, typ) env) depth b in
+      build_let_in n trm' typ' b'
   | App (f, xs) ->
       let f' = build_ast env depth f in
       let xs' = List.map (build_ast env depth) (Array.to_list xs) in
