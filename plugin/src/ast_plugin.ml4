@@ -468,11 +468,17 @@ let bindings_for_inductive (env : Environ.env) (mutind_body : mutual_inductive_b
 (*
  * Build an AST for a mutually inductive type
  *)
-let build_inductive (body_asts : string list) (u : Instance.t) =
+let build_inductive (ind_or_coind : Decl_kinds.recursivity_kind) (body_asts : string list) (u : Instance.t) =
+  let kind_of_ind =
+    match ind_or_coind with
+      Finite -> "Inductive"
+    | CoFinite -> "CoInductive"
+    | BiFinite -> "Record"
+  in
   if show_universes () then
-    build "Ind" (List.append body_asts [build_universe_instance u])
+    build kind_of_ind (List.append body_asts [build_universe_instance u])
   else
-    build "Ind" body_asts
+    build kind_of_ind body_asts
 
 (*
  * Build an AST for a single inductive body
@@ -640,7 +646,8 @@ and build_minductive (env : Environ.env) (depth : int) (((i, i_index), u) : pind
     let ind_bodies_list = Array.to_list ind_bodies in
     let env_ind = Environ.push_rel_context (bindings_for_inductive env mutind_body ind_bodies_list) env in
     let cs = List.map (build_oinductive env_ind depth) ind_bodies_list in
-    build_inductive cs u
+    let ind_or_coind = mutind_body.mind_finite in
+    build_inductive ind_or_coind cs u
 
 (* --- Top-level functionality --- *)
 
