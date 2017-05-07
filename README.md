@@ -15,7 +15,7 @@ it prints an s-expression that represents the AST.
 For example:
 
     Coq < PrintAST nat.
-    (Ind ((Name nat) (inductive_body (O 1 (Name nat)) (S 2 (Prod (Anonymous) (Name nat) (Name nat))))))
+    (Inductive ((Name nat) (inductive_body (O 1 (Name nat)) (S 2 (Prod (Anonymous) (Name nat) (Name nat))))))
 
 ## Using the Plugin
 
@@ -35,7 +35,7 @@ This should install it in your Coq directory. In CoqTop (or whichever IDE you us
 To print:
 
         Coq < PrintAST le.
-        (Ind ((Name le) (inductive_body (le_n 1 (Prod (Name n) (Name nat) (App (Name le) (Name n) (Name n)))) (le_S 2 (Prod (Name n) (Name nat) (Prod (Name m) (Name nat) (Prod (Anonymous) (App (Name le) (Name n) (Name m)) (App (Name le) (Name n) (App (Construct (Name nat) 2) (Name m))))))))))
+        (Inductive ((Name le) (inductive_body (le_n 1 (Prod (Name n) (Name nat) (App (Name le) (Name n) (Name n)))) (le_S 2 (Prod (Name n) (Name nat) (Prod (Name m) (Name nat) (Prod (Anonymous) (App (Name le) (Name n) (Name m)) (App (Name le) (Name n) (App (Construct (Name nat) 2) (Name m))))))))))
 
 ### Toggling DeBruijn Indexing
 
@@ -44,7 +44,7 @@ You can change the plugin to use DeBruijn indexing instead of names:
     Coq < Set PrintAST Indexing.
     
     Coq < PrintAST nat.
-    (Ind ((Name nat) (inductive_body (O 1 (Rel 1)) (S 2 (Prod (Anonymous) (Rel 1) (Rel 2))))))
+    (Inductive ((Name nat) (inductive_body (O 1 (Rel 1)) (S 2 (Prod (Anonymous) (Rel 1) (Rel 2))))))
 
 ### Showing Universe Instances
 
@@ -57,7 +57,7 @@ For universe-polymorphic constants, you can turn on printing universe instances:
 You can change the depth at which the plugin prints definitions:
 
     Coq < PrintAST le with depth 1.
-    (Ind ((Name le) (inductive_body (le_n 1 (Prod (Name n) (Ind ((Name nat) (inductive_body (O 1 (Rel 1)) (S 2 (Prod (Anonymous) (Rel 1) (Rel 2)))))) (App (Rel 2) (Rel 1) (Rel 1)))) (le_S 2 (Prod (Name n) (Ind ((Name nat) (inductive_body (O 1 (Rel 1)) (S 2 (Prod (Anonymous) (Rel 1) (Rel 2)))))) (Prod (Name m) (Ind ((Name nat) (inductive_body (O 1 (Rel 1)) (S 2 (Prod (Anonymous) (Rel 1) (Rel 2)))))) (Prod (Anonymous) (App (Rel 3) (Rel 2) (Rel 1)) (App (Rel 4) (Rel 3) (App (Construct (Ind ((Name nat) (inductive_body (O 1 (Rel 1)) (S 2 (Prod (Anonymous) (Rel 1) (Rel 2)))))) 2) (Rel 2))))))))))
+    (Inductive ((Name le) (inductive_body (le_n 1 (Prod (Name n) (Inductive ((Name nat) (inductive_body (O 1 (Rel 1)) (S 2 (Prod (Anonymous) (Rel 1) (Rel 2)))))) (App (Rel 2) (Rel 1) (Rel 1)))) (le_S 2 (Prod (Name n) (Inductive ((Name nat) (inductive_body (O 1 (Rel 1)) (S 2 (Prod (Anonymous) (Rel 1) (Rel 2)))))) (Prod (Name m) (Inductive ((Name nat) (inductive_body (O 1 (Rel 1)) (S 2 (Prod (Anonymous) (Rel 1) (Rel 2)))))) (Prod (Anonymous) (App (Rel 3) (Rel 2) (Rel 1)) (App (Rel 4) (Rel 3) (App (Construct (Inductive ((Name nat) (inductive_body (O 1 (Rel 1)) (S 2 (Prod (Anonymous) (Rel 1) (Rel 2)))))) 2) (Rel 2))))))))))
 
 The default depth is 0. If the argument is a constant or inductive type, the plugin always unfolds it.
 
