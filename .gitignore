@@ -3,10 +3,14 @@ src/*~
 *.coq.bak
 *.cmi
 *.ml.d
+*.mli.d
 *.cmo
 *.cmx
 *.cmxs
-*.ml
+*.cma
+*.a
+*.cmxa
+*.mllib.d
 *.o
 *.ml4.d
 *.cmi

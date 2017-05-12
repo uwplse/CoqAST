@@ -2,4 +2,7 @@
 -Q . PrintAST
 
 ast_plugin.ml4
+ast_plugin.mllib
+adler32.ml
+adler32.mli
 ASTPlugin.v

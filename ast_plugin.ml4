@@ -7,6 +7,12 @@ open Term
 open Names
 open Pp
 
+open Adler32
+
+let adler32_digest s =
+  let d = adler32 s Int32.one 0 (String.length s) in
+  Printf.sprintf "%lX" d
+
 let rec range (min : int) (max : int) =
   if min < max then min :: range (min + 1) max else []
 
@@ -226,9 +232,9 @@ match a with
   let ls = v :: List.map (hash_of_ast hash) l in
   hash (String.concat "" ls)
 
-let digest s = Digest.to_hex (Digest.string s)
+let md5_digest s = Digest.to_hex (Digest.string s)
 
-let digest_of_ast = hash_of_ast digest
+let digest_of_ast = hash_of_ast md5_digest
 
 let string_of_gref gref =
   match gref with
