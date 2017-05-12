@@ -11,7 +11,7 @@ end
 let _base = 65521
 let _nmax = 5552
 
-let adler32 buf adler32 off len =
+let digest buf adler32 off len =
   let a = ref (Int32.to_int Op.((adler32 >> 16) && 0xFFFFl)) in
   let b = ref (Int32.to_int Op.(adler32 && 0xFFFFl)) in
   let l = ref len in

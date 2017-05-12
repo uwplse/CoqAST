@@ -1,8 +1,8 @@
--I .
--Q . PrintAST
+-Q theories PrintAST
+-I src
 
-ast_plugin.ml4
-ast_plugin.mllib
-adler32.ml
-adler32.mli
-ASTPlugin.v
+src/ast.ml4
+src/adler32.mli
+src/adler32.ml
+src/ast_plugin.mlpack
+theories/ASTPlugin.v
