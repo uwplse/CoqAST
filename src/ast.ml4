@@ -225,14 +225,12 @@ match a with
   let s = String.concat " " sl in
   Printf.sprintf "(%s %s)" h s
 
-let rec hash_of_ast hash a =
+let rec digest_of_ast hash a =
 match a with
 | Leaf v -> hash v
 | Node (v, l) ->
-  let ls = v :: List.map (hash_of_ast hash) l in
+  let ls = v :: List.map (digest_of_ast hash) l in
   hash (String.concat "" ls)
-
-let digest_of_ast = hash_of_ast md5_digest
 
 let string_of_gref gref =
   match gref with
@@ -304,9 +302,9 @@ let print_ast fmt gref t =
   let s = Printf.sprintf "%s: %s\n" (string_of_gref gref) (string_of_ast ast) in
   pp_with fmt (str s)
 
-let print_ast_type_digest fmt gref t_type delim =
+let print_ast_type_digest hash fmt gref t_type delim =
   let type_ast = build_ast (Global.env ()) 0 t_type in
-  let type_digest = digest_of_ast type_ast in
+  let type_digest = digest_of_ast hash type_ast in
   let s = Printf.sprintf
     "%s { \"name\": \"%s\", \"isProp\": %B, \"isOpaque\": %B, \"typeDigest\": \"%s\" }"
     !delim (string_of_gref gref)  (is_prop gref) (is_opaque gref) type_digest
@@ -314,9 +312,9 @@ let print_ast_type_digest fmt gref t_type delim =
   pp_with fmt (str s);
   delim := ",\n"
 
-let print_ast_body_digest fmt gref t_body delim =
+let print_ast_body_digest hash fmt gref t_body delim =
   let body_ast = build_ast (Global.env ()) 1 t_body in
-  let body_digest = digest_of_ast body_ast in
+  let body_digest = digest_of_ast hash body_ast in
   let s = Printf.sprintf
     "%s { \"name\": \"%s\", \"isProp\": %B, \"isOpaque\": %B, \"bodyDigest\": \"%s\" }"
     !delim (string_of_gref gref) (is_prop gref) (is_opaque gref) body_digest
@@ -324,11 +322,11 @@ let print_ast_body_digest fmt gref t_body delim =
   pp_with fmt (str s);
   delim := ",\n"
 
-let print_ast_all_digest fmt gref t_type t_body delim =
+let print_ast_all_digest hash fmt gref t_type t_body delim =
   let type_ast = build_ast (Global.env ()) 0 t_type in
   let body_ast = build_ast (Global.env ()) 1 t_body in
-  let type_digest = digest_of_ast type_ast in
-  let body_digest = digest_of_ast body_ast in
+  let type_digest = digest_of_ast hash type_ast in
+  let body_digest = digest_of_ast hash body_ast in
   let s = Printf.sprintf
     "%s { \"name\": \"%s\", \"isProp\": %B, \"isOpaque\": %B, \"typeDigest\": \"%s\", \"bodyDigest\": \"%s\" }"
     !delim (string_of_gref gref) (is_prop gref) (is_opaque gref) type_digest body_digest
@@ -360,7 +358,7 @@ let print_ast_of_gref_type fmt gref =
     end
   | _ -> ()
 
-let print_digest_of_gref fmt gref delim =
+let print_digest_of_gref hash fmt gref delim =
   match gref with
   | Globnames.VarRef _ -> ()
   | Globnames.ConstRef cst ->
@@ -368,16 +366,16 @@ let print_digest_of_gref fmt gref delim =
     let cb = Environ.lookup_constant cst (Global.env()) in
     begin match cb.Declarations.const_type with
     | Declarations.RegularArity t_type ->
-      print_ast_all_digest fmt gref t_type t_body delim
+      print_ast_all_digest hash fmt gref t_type t_body delim
     | Declarations.TemplateArity _ ->
-      print_ast_body_digest fmt gref t_body delim
+      print_ast_body_digest hash fmt gref t_body delim
     end
   | Globnames.IndRef i ->
     let t_body = mkInd i in
-    print_ast_body_digest fmt gref t_body delim
+    print_ast_body_digest hash fmt gref t_body delim
   | Globnames.ConstructRef _ -> ()
 
-let print_vio_digest_of_gref fmt gref delim =
+let print_vio_digest_of_gref hash fmt gref delim =
   match gref with
   | Globnames.VarRef _ -> ()
   | Globnames.ConstRef cst ->
@@ -386,15 +384,15 @@ let print_vio_digest_of_gref fmt gref delim =
     begin match cb.Declarations.const_type with
     | Declarations.RegularArity t_type ->
       if is_opaque gref then
-	print_ast_type_digest fmt gref t_type delim
+	print_ast_type_digest hash fmt gref t_type delim
       else
-	print_ast_all_digest fmt gref t_type t_body delim
+	print_ast_all_digest hash fmt gref t_type t_body delim
     | Declarations.TemplateArity _ ->
-      print_ast_body_digest fmt gref t_body delim
+      print_ast_body_digest hash fmt gref t_body delim
     end
   | Globnames.IndRef i ->
     let t_body = mkInd i in
-    print_ast_body_digest fmt gref t_body delim
+    print_ast_body_digest hash fmt gref t_body delim
   | Globnames.ConstructRef _ -> ()
 
 VERNAC COMMAND EXTEND Ast
@@ -441,7 +439,7 @@ VERNAC COMMAND EXTEND Ast
     let fmt = formatter None in
     let delim = ref "" in
     pp_with fmt (str "[\n");
-    List.iter (fun ref -> print_digest_of_gref fmt (Nametab.global ref) delim) rl;
+    List.iter (fun ref -> print_digest_of_gref md5_digest fmt (Nametab.global ref) delim) rl;
     pp_with fmt (str "\n]\n");
     Format.pp_print_flush fmt ();
     if not (Int.equal (Buffer.length buf) 0) then begin
@@ -455,7 +453,7 @@ VERNAC COMMAND EXTEND Ast
     let fmt = formatter (Some oc) in
     let delim = ref "" in
     pp_with fmt (str "[\n");
-    List.iter (fun ref -> print_digest_of_gref fmt (Nametab.global ref) delim) rl;
+    List.iter (fun ref -> print_digest_of_gref md5_digest fmt (Nametab.global ref) delim) rl;
     pp_with fmt (str "\n]\n");
     Format.pp_print_flush fmt ();
     close_out oc;
@@ -466,7 +464,7 @@ VERNAC COMMAND EXTEND Ast
     let fmt = formatter None in
     let delim = ref "" in
     pp_with fmt (str "[\n");
-    List.iter (fun ref -> print_vio_digest_of_gref fmt (Nametab.global ref) delim) rl;
+    List.iter (fun ref -> print_vio_digest_of_gref md5_digest fmt (Nametab.global ref) delim) rl;
     pp_with fmt (str "\n]\n");
     Format.pp_print_flush fmt ();
     if not (Int.equal (Buffer.length buf) 0) then begin
@@ -504,7 +502,7 @@ VERNAC COMMAND EXTEND Ast
     let dirlist = List.map locate_mp_dirpath rl in
     let grefs = get_dirlist_grefs dirlist in
     pp_with fmt (str "[\n");
-    List.iter (fun gref -> print_digest_of_gref fmt gref delim) grefs;
+    List.iter (fun gref -> print_digest_of_gref md5_digest fmt gref delim) grefs;
     pp_with fmt (str "\n]\n");
     Format.pp_print_flush fmt ();
     if not (Int.equal (Buffer.length buf) 0) then begin
@@ -519,7 +517,7 @@ VERNAC COMMAND EXTEND Ast
     let dirlist = List.map locate_mp_dirpath rl in
     let grefs = get_dirlist_grefs dirlist in
     pp_with fmt (str "[\n");
-    List.iter (fun gref -> print_vio_digest_of_gref fmt gref delim) grefs;
+    List.iter (fun gref -> print_vio_digest_of_gref md5_digest fmt gref delim) grefs;
     pp_with fmt (str "\n]\n");
     Format.pp_print_flush fmt ();
     if not (Int.equal (Buffer.length buf) 0) then begin
@@ -535,7 +533,7 @@ VERNAC COMMAND EXTEND Ast
     let dirlist = List.map locate_mp_dirpath rl in
     let grefs = get_dirlist_grefs dirlist in
     pp_with fmt (str "[\n");
-    List.iter (fun gref -> print_digest_of_gref fmt gref delim) grefs;
+    List.iter (fun gref -> print_digest_of_gref md5_digest fmt gref delim) grefs;
     pp_with fmt (str "\n]\n");
     Format.pp_print_flush fmt ();
     close_out oc;
@@ -549,7 +547,7 @@ VERNAC COMMAND EXTEND Ast
     let dirlist = List.map locate_mp_dirpath rl in
     let grefs = get_dirlist_grefs dirlist in
     pp_with fmt (str "[\n");
-    List.iter (fun gref -> print_vio_digest_of_gref fmt gref delim) grefs;
+    List.iter (fun gref -> print_vio_digest_of_gref md5_digest fmt gref delim) grefs;
     pp_with fmt (str "\n]\n");
     Format.pp_print_flush fmt ();
     close_out oc;
