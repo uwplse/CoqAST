@@ -447,6 +447,19 @@ VERNAC COMMAND EXTEND Ast
       Buffer.reset buf
     end
   ]
+| [ "Digest" "ADLER32" reference_list(rl) ] ->
+  [
+    let fmt = formatter None in
+    let delim = ref "" in
+    pp_with fmt (str "[\n");
+    List.iter (fun ref -> print_digest_of_gref adler32_digest fmt (Nametab.global ref) delim) rl;
+    pp_with fmt (str "\n]\n");
+    Format.pp_print_flush fmt ();
+    if not (Int.equal (Buffer.length buf) 0) then begin
+      Pp.msg_notice (str (Buffer.contents buf));
+      Buffer.reset buf
+    end
+  ]
 | [ "Digest" "MD5" string(f) reference_list(rl) ] ->
   [
     let oc = open_out f in
@@ -459,12 +472,37 @@ VERNAC COMMAND EXTEND Ast
     close_out oc;
     Pp.msg_notice (str "wrote digest(s) to file: " ++ str f)
   ]
+| [ "Digest" "ADLER32" string(f) reference_list(rl) ] ->
+  [
+    let oc = open_out f in
+    let fmt = formatter (Some oc) in
+    let delim = ref "" in
+    pp_with fmt (str "[\n");
+    List.iter (fun ref -> print_digest_of_gref adler32_digest fmt (Nametab.global ref) delim) rl;
+    pp_with fmt (str "\n]\n");
+    Format.pp_print_flush fmt ();
+    close_out oc;
+    Pp.msg_notice (str "wrote digest(s) to file: " ++ str f)
+  ]
 | [ "Digest" "VIO" "MD5" reference_list(rl) ] ->
   [
     let fmt = formatter None in
     let delim = ref "" in
     pp_with fmt (str "[\n");
     List.iter (fun ref -> print_vio_digest_of_gref md5_digest fmt (Nametab.global ref) delim) rl;
+    pp_with fmt (str "\n]\n");
+    Format.pp_print_flush fmt ();
+    if not (Int.equal (Buffer.length buf) 0) then begin
+      Pp.msg_notice (str (Buffer.contents buf));
+      Buffer.reset buf
+    end
+  ]
+| [ "Digest" "VIO" "ADLER32" reference_list(rl) ] ->
+  [
+    let fmt = formatter None in
+    let delim = ref "" in
+    pp_with fmt (str "[\n");
+    List.iter (fun ref -> print_vio_digest_of_gref adler32_digest fmt (Nametab.global ref) delim) rl;
     pp_with fmt (str "\n]\n");
     Format.pp_print_flush fmt ();
     if not (Int.equal (Buffer.length buf) 0) then begin
@@ -510,6 +548,21 @@ VERNAC COMMAND EXTEND Ast
       Buffer.reset buf
     end
   ]
+| [ "ModuleDigest" "ADLER32" reference_list(rl) ] ->
+  [
+    let fmt = formatter None in
+    let delim = ref "" in
+    let dirlist = List.map locate_mp_dirpath rl in
+    let grefs = get_dirlist_grefs dirlist in
+    pp_with fmt (str "[\n");
+    List.iter (fun gref -> print_digest_of_gref adler32_digest fmt gref delim) grefs;
+    pp_with fmt (str "\n]\n");
+    Format.pp_print_flush fmt ();
+    if not (Int.equal (Buffer.length buf) 0) then begin
+      Pp.msg_notice (str (Buffer.contents buf));
+      Buffer.reset buf
+    end
+  ]
 | [ "ModuleDigest" "VIO" "MD5" reference_list(rl) ] ->
   [
     let fmt = formatter None in
@@ -518,6 +571,21 @@ VERNAC COMMAND EXTEND Ast
     let grefs = get_dirlist_grefs dirlist in
     pp_with fmt (str "[\n");
     List.iter (fun gref -> print_vio_digest_of_gref md5_digest fmt gref delim) grefs;
+    pp_with fmt (str "\n]\n");
+    Format.pp_print_flush fmt ();
+    if not (Int.equal (Buffer.length buf) 0) then begin
+      Pp.msg_notice (str (Buffer.contents buf));
+      Buffer.reset buf
+    end
+  ]
+| [ "ModuleDigest" "VIO" "ADLER32" reference_list(rl) ] ->
+  [
+    let fmt = formatter None in
+    let delim = ref "" in
+    let dirlist = List.map locate_mp_dirpath rl in
+    let grefs = get_dirlist_grefs dirlist in
+    pp_with fmt (str "[\n");
+    List.iter (fun gref -> print_vio_digest_of_gref adler32_digest fmt gref delim) grefs;
     pp_with fmt (str "\n]\n");
     Format.pp_print_flush fmt ();
     if not (Int.equal (Buffer.length buf) 0) then begin
@@ -539,6 +607,20 @@ VERNAC COMMAND EXTEND Ast
     close_out oc;
     Pp.msg_notice (str "wrote digest(s) to file: " ++ str f)
   ]
+| [ "ModuleDigest" "ADLER32" string(f) reference_list(rl) ] ->
+  [
+    let oc = open_out f in
+    let fmt = formatter (Some oc) in
+    let delim = ref "" in
+    let dirlist = List.map locate_mp_dirpath rl in
+    let grefs = get_dirlist_grefs dirlist in
+    pp_with fmt (str "[\n");
+    List.iter (fun gref -> print_digest_of_gref adler32_digest fmt gref delim) grefs;
+    pp_with fmt (str "\n]\n");
+    Format.pp_print_flush fmt ();
+    close_out oc;
+    Pp.msg_notice (str "wrote digest(s) to file: " ++ str f)
+  ]
 | [ "ModuleDigest" "VIO" "MD5" string(f) reference_list(rl) ] ->
   [
     let oc = open_out f in
@@ -548,6 +630,20 @@ VERNAC COMMAND EXTEND Ast
     let grefs = get_dirlist_grefs dirlist in
     pp_with fmt (str "[\n");
     List.iter (fun gref -> print_vio_digest_of_gref md5_digest fmt gref delim) grefs;
+    pp_with fmt (str "\n]\n");
+    Format.pp_print_flush fmt ();
+    close_out oc;
+    Pp.msg_notice (str "wrote digest(s) to file: " ++ str f)
+  ]
+| [ "ModuleDigest" "VIO" "ADLER32" string(f) reference_list(rl) ] ->
+  [
+    let oc = open_out f in
+    let fmt = formatter (Some oc) in
+    let delim = ref "" in
+    let dirlist = List.map locate_mp_dirpath rl in
+    let grefs = get_dirlist_grefs dirlist in
+    pp_with fmt (str "[\n");
+    List.iter (fun gref -> print_vio_digest_of_gref adler32_digest fmt gref delim) grefs;
     pp_with fmt (str "\n]\n");
     Format.pp_print_flush fmt ();
     close_out oc;
