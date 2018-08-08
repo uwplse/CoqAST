@@ -19,8 +19,8 @@ For example:
 
 ## Using the Plugin
 
-The plugin is built to work with Coq 8.5pl3. It may not build for other versions of Coq, since the
-AST sometimes changes between Coq versions.
+The plugin is built to work with Coq 8.8. It may not build for other versions of Coq, since the
+API sometimes changes between Coq versions.
 
 To build:
 

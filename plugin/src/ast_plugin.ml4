@@ -5,6 +5,10 @@ open Format
 open Univ
 open Term
 open Names
+open Environ
+open Stdarg
+
+module CRD = Context.Rel.Declaration
 
 (*
  * Plugin to print an s-expression representing the (possibly expanded) AST for a definition.
@@ -22,7 +26,6 @@ open Names
  *)
 let opt_debruijn = ref (false)
 let _ = Goptions.declare_bool_option {
-  Goptions.optsync = true;
   Goptions.optdepr = false;
   Goptions.optname = "DeBruijn indexing in PrintAST";
   Goptions.optkey = ["PrintAST"; "Indexing"];
@@ -37,7 +40,6 @@ let is_debruijn () = !opt_debruijn
  *)
 let opt_show_universes = ref (false)
 let _ = Goptions.declare_bool_option {
-  Goptions.optsync = true;
   Goptions.optdepr = false;
   Goptions.optname = "Show universe instances in PrintAST";
   Goptions.optkey = ["PrintAST"; "Show"; "Universes"];
@@ -52,8 +54,8 @@ let show_universes () = !opt_show_universes
 (*
  * Prints a string using the Coq pretty printer
  *)
-let print (s : string) =
-  Pp.pp (Pp.str s)
+let print (s : string) : unit =
+  Pp.pp_with Format.std_formatter (Pp.str s)
 
 (*
  * Using a supplied pretty printing function, prints directly to a string
@@ -173,8 +175,8 @@ let build_evar (k : existential_key) (c_asts : string list) =
  *
  * The name may be Anonymous, in which case we print the index
  *)
-let build_rel_named (env : Environ.env) (i : int) =
-  let (name, body, typ) = Environ.lookup_rel i env in
+let build_rel_named (env : env) (i : int) =
+  let (name, body, typ) = CRD.to_tuple @@ lookup_rel i env in
   build_name name
 
 (*
@@ -183,7 +185,7 @@ let build_rel_named (env : Environ.env) (i : int) =
  * If De Bruijn mode is on, we show the index
  * Otherwise, we show the Name the index refers to in the environment
  *)
-let build_rel (env : Environ.env) (i : int) =
+let build_rel (env : env) (i : int) =
   if is_debruijn () then
     build "Rel" [string_of_int i]
   else
@@ -404,7 +406,7 @@ let build_definition (kn : kernel_name) (typ_ast : string) (u : Instance.t) =
 let bindings_for_fix (names : name array) (typs : constr array) =
   Array.to_list
     (CArray.map2_i
-      (fun i name typ -> (name, None, Vars.lift i typ))
+      (fun i name typ -> CRD.(LocalAssum (name, Vars.lift i typ)))
       names typs)
 
 (*
@@ -440,8 +442,8 @@ let build_cofix (funs : string list) (index : int) =
 (*
  * Get the body of a mutually inductive type
  *)
-let lookup_mutind_body (i : mutual_inductive) (env : Environ.env) =
-  Environ.lookup_mind i env
+let lookup_mutind_body (i : mutual_inductive) (env : env) =
+  lookup_mind i env
 
 (*
  * Given an inductive type, the AST just for its name without recursing further
@@ -454,15 +456,15 @@ let build_inductive_name (ind_body : one_inductive_body) =
  * Inductive types also create bindings that we need to push to the environment
  * This function gets those bindings
  *)
-let bindings_for_inductive (env : Environ.env) (mutind_body : mutual_inductive_body) (ind_bodies : one_inductive_body list) =
+let bindings_for_inductive (env : env) (mutind_body : mutual_inductive_body) (ind_bodies : one_inductive_body list) =
   List.map
     (fun ind_body ->
-      let univ_context = mutind_body.mind_universes in
-      let univ_instance = UContext.instance univ_context in
+      let univs = Declareops.inductive_polymorphic_context mutind_body in
+      let univ_instance = Univ.make_abstract_instance univs in
       let name_id = ind_body.mind_typename in
       let mutind_spec = (mutind_body, ind_body) in
       let typ = Inductive.type_of_inductive env (mutind_spec, univ_instance) in
-      (Names.Name name_id, None, typ))
+      CRD.(LocalAssum(Names.Name name_id, typ)))
     ind_bodies
 
 (*
@@ -552,7 +554,7 @@ let build_proj (p_const_ast : string) (c_ast : string) =
 
 (* --- Full AST --- *)
 
-let rec build_ast (env : Environ.env) (depth : int) (trm : types) =
+let rec build_ast (env : env) (depth : int) (trm : types) =
   match kind_of_term trm with
     Rel i ->
       build_rel env i
@@ -571,16 +573,16 @@ let rec build_ast (env : Environ.env) (depth : int) (trm : types) =
       build_cast c' k t'
   | Prod (n, t, b) ->
       let t' = build_ast env depth t in
-      let b' = build_ast (Environ.push_rel (n, None, t) env) depth b in
+      let b' = build_ast (push_rel CRD.(LocalAssum(n, t)) env) depth b in
       build_product n t' b'
   | Lambda (n, t, b) ->
       let t' = build_ast env depth t in
-      let b' = build_ast (Environ.push_rel (n, None, t) env) depth b in
+      let b' = build_ast (push_rel CRD.(LocalAssum(n, t)) env) depth b in
       build_lambda n t' b'
   | LetIn (n, trm, typ, b) ->
       let trm' = build_ast env depth trm in
       let typ' = build_ast env depth typ in
-      let b' = build_ast (Environ.push_rel (n, Some b, typ) env) depth b in
+      let b' = build_ast (push_rel CRD.(LocalDef(n, b, typ)) env) depth b in
       build_let_in n trm' typ' b'
   | App (f, xs) ->
       let f' = build_ast env depth f in
@@ -607,22 +609,19 @@ let rec build_ast (env : Environ.env) (depth : int) (trm : types) =
       let c' = build_ast env depth c in
       build_proj p' c'
 
-and build_const (env : Environ.env) (depth : int) ((c, u) : pconstant) =
+and build_const (env : env) (depth : int) ((c, u) : pconstant) =
   let kn = Constant.canonical c in
-  let cd = Environ.lookup_constant c env in
+  let cd = lookup_constant c env in
   let global_env = Global.env () in
   match get_definition cd with
-    None ->
-      begin
-        match cd.const_type with
-          RegularArity ty -> build_axiom kn (build_ast global_env (depth - 1) ty) u
-        | TemplateArity _ -> assert false (* pre-8.5 universe polymorphism *)
-      end
+  | None ->
+     let ty = cd.const_type in
+     build_axiom kn (build_ast global_env (depth - 1) ty) u
   | Some c ->
-      build_definition kn (build_ast global_env (depth - 1) c) u
+     build_definition kn (build_ast global_env (depth - 1) c) u
 
-and build_fixpoint_functions (env : Environ.env) (depth : int) (names : name array) (typs : constr array) (defs : constr array)  =
-  let env_fix = Environ.push_rel_context (bindings_for_fix names typs) env in
+and build_fixpoint_functions (env : env) (depth : int) (names : name array) (typs : constr array) (defs : constr array)  =
+  let env_fix = push_rel_context (bindings_for_fix names typs) env in
   List.map
     (fun i ->
       let typ = build_ast env depth (Array.get typs i) in
@@ -630,21 +629,21 @@ and build_fixpoint_functions (env : Environ.env) (depth : int) (names : name arr
       build_fix_fun i (Array.get names i) typ def)
     (range 0 (Array.length names))
 
-and build_oinductive (env : Environ.env) (depth : int) (ind_body : one_inductive_body) =
+and build_oinductive (env : env) (depth : int) (ind_body : one_inductive_body) =
   let constrs =
     List.map
       (fun (i, (n, typ)) -> build (Names.string_of_id n) [i; build_ast env (depth - 1) typ])
     (named_constructors ind_body)
   in build (build "Name" [Names.string_of_id ind_body.mind_typename]) [build_inductive_body constrs]
 
-and build_minductive (env : Environ.env) (depth : int) (((i, i_index), u) : pinductive) =
+and build_minductive (env : env) (depth : int) (((i, i_index), u) : pinductive) =
   let mutind_body = lookup_mutind_body i env in
   let ind_bodies = mutind_body.mind_packets in
   if depth <= 0 then (* don't expand *)
     build_inductive_name (Array.get ind_bodies i_index)
   else (* expand *)
     let ind_bodies_list = Array.to_list ind_bodies in
-    let env_ind = Environ.push_rel_context (bindings_for_inductive env mutind_body ind_bodies_list) env in
+    let env_ind = push_rel_context (bindings_for_inductive env mutind_body ind_bodies_list) env in
     let cs = List.map (build_oinductive env_ind depth) ind_bodies_list in
     let ind_or_coind = mutind_body.mind_finite in
     build_inductive ind_or_coind cs u
@@ -655,7 +654,7 @@ and build_minductive (env : Environ.env) (depth : int) (((i, i_index), u) : pind
  * Apply a function to a definition up to a certain depth
  * That is, always unfold the first constant or inductive definition
  *)
-let apply_to_definition (f : Environ.env -> int -> types -> 'a) (env : Environ.env) (depth : int) (body : types) =
+let apply_to_definition (f : env -> int -> types -> 'a) (env : env) (depth : int) (body : types) =
   match (kind_of_term body) with
   | Const _ ->
       f env (depth + 1) body
@@ -665,15 +664,16 @@ let apply_to_definition (f : Environ.env -> int -> types -> 'a) (env : Environ.e
       f env depth body
 
 (* Top-level print AST functionality *)
-let print_ast (depth : int) (def : Constrexpr.constr_expr) =
-  let (evm, env) = Lemmas.get_current_context() in
-  let (body, _) = Constrintern.interp_constr env evm def in
+let print_ast (depth : int) (def : Constrexpr.constr_expr) : unit =
+  let (evm, env) = Lemmas.get_current_context () in
+  let (ebody, _) = Constrintern.interp_constr env evm def in
+  let body = EConstr.to_constr evm ebody in
   let ast = apply_to_definition build_ast env depth body in
   print ast
 
 (* PrintAST command
    The depth specifies the depth at which to unroll nested type definitions *)
-VERNAC COMMAND EXTEND Print_AST
+VERNAC COMMAND EXTEND Print_AST CLASSIFIED AS SIDEFF
 | [ "PrintAST" constr(def) ] ->
   [ print_ast 0 def ]
 | [ "PrintAST" constr(def) "with" "depth" integer(depth)] ->
