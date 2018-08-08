@@ -1,12 +1,12 @@
 DECLARE PLUGIN "ast_plugin"
 
-open Declarations
 open Format
-open Univ
-open Term
+open Constr
 open Names
-open Environ
 open Stdarg
+open Environ
+open Declarations
+open Univ
 
 module CRD = Context.Rel.Declaration
 
@@ -64,12 +64,6 @@ let print_to_string (pp : formatter -> 'a -> unit) (trm : 'a) =
   Format.asprintf "%a" pp trm
 
 (*
- * Pretty prints a constructor
- *)
-let pp_constr (fmt : formatter) (c : constr)  =
-  Pp.pp_with fmt (Printer.pr_constr c)
-
-(*
  * Pretty prints a universe level
  *)
 let pp_univ_level (fmt : formatter) (l : Level.t) =
@@ -111,9 +105,9 @@ let rec range (min : int) (max : int) =
 (*
  * Build an AST for a name
  *)
-let build_name (n : name) =
+let build_name (n : Name.t) =
   match n with
-    Name id -> build "Name" [string_of_id id]
+    Name id -> build "Name" [Id.to_string id]
   | Anonymous -> "(Anonymous)"
 
 
@@ -126,8 +120,8 @@ let build_name (n : name) =
 (*
  * Build the AST for a variable
  *)
-let build_var (v : identifier) =
-  build "Var" [string_of_id v]
+let build_var (v : Id.t) =
+  build "Var" [Id.to_string v]
 
 (* --- Metavariables --- *)
 
@@ -148,14 +142,14 @@ let build_meta (n : metavariable) =
 (*
  * Existential variables are basically integers, like metavariables
  * It's unclear to me why these exist separately from metavariables in the AST, since the words are used interchangeably in comments
- * The existential_key technically has a different type, but this is only for the kernel
+ * The evar technically has a different type, but this is only for the kernel
  *
  * These are also only useful if you are extending the plugin
  * I have no clue why existentials and metavariables are distinct in the AST
  * I also don't know what the array of constructors is for -- if you figure this all out please submit a pull request!
  *)
 
-let build_evar (k : existential_key) (c_asts : string list) =
+let build_evar (k : Evar.t) (c_asts : string list) =
   build "Evar" ((string_of_int (Evar.repr k)) :: c_asts)
 
 (* --- Indexes --- *)
@@ -211,7 +205,7 @@ let build_universe_level (l : Level.t)  =
  * If the universe is a level, then print that level
  * Otherwise take the max of the levels of the algebraic universe
  *)
-let build_universe_levels (u : universe) =
+let build_universe_levels (u : Universe.t) =
   match Universe.level u with
     Some l -> build_universe_level l
   | None -> build "Max" (List.map build_universe_level (LSet.elements (Universe.levels u)))
@@ -219,7 +213,7 @@ let build_universe_levels (u : universe) =
 (*
  * Build the AST for a universe
  *)
-let build_universe (u : universe) =
+let build_universe (u : Universe.t) =
   build "Universe" [build_universe_levels u]
 
 (* --- Universe instances --- *)
@@ -252,10 +246,10 @@ let build_universe_instance (i : Instance.t) =
 (*
  * Build the AST for a sort
  *)
-let build_sort (s : sorts) =
+let build_sort (s : Sorts.t) =
   let s_ast =
     match s with
-      Prop _ -> if s = prop_sort then "Prop" else "Set"
+    | Prop _ -> if s = Sorts.prop then "Prop" else "Set"
     | Type u -> build "Type" [build_universe u]
   in build "Sort" [s_ast]
 
@@ -300,13 +294,13 @@ let build_cast (trm_ast : string) (kind : cast_kind) (typ_ast : string) =
 (*
  * Build the AST for a product
  *)
-let build_product (n : name) (typ_ast : string) (body_ast : string) =
+let build_product (n : Name.t) (typ_ast : string) (body_ast : string) =
   build "Prod" [build_name n; typ_ast; body_ast]
 
 (*
  * Build the AST for a lambda
  *)
-let build_lambda (n : name) (typ_ast : string) (body_ast : string) =
+let build_lambda (n : Name.t) (typ_ast : string) (body_ast : string) =
   build "Lambda" [build_name n; typ_ast; body_ast]
 
 (* --- Let --- *)
@@ -319,7 +313,7 @@ let build_lambda (n : name) (typ_ast : string) (body_ast : string) =
 (*
  * Build the AST for a let expression
  *)
-let build_let_in (n : name) (trm_ast : string) (typ_ast : string) (body_ast : string) =
+let build_let_in (n : Name.t) (trm_ast : string) (typ_ast : string) (body_ast : string) =
   build "LetIn" [build_name n; trm_ast; typ_ast; body_ast]
 
 (* --- Application --- *)
@@ -351,8 +345,8 @@ let build_app (f_ast : string) (arg_asts : string list) =
 (*
  * Build the AST for a kernel name of a constant
  *)
-let build_kername (kn : kernel_name) =
-  string_of_kn kn
+let build_kername (kn : KerName.t) =
+  KerName.to_string kn
 
 (*
  * Get the definition for a constant, forcing it to a Constr
@@ -369,7 +363,7 @@ let get_definition (cd : Declarations.constant_body) =
 (*
  * Build the AST for an axiom, which is a constant with no associated body
  *)
-let build_axiom (kn : kernel_name) (typ_ast : string) (u : Instance.t) =
+let build_axiom (kn : KerName.t) (typ_ast : string) (u : Instance.t) =
   let kn' = build_kername kn in
   if show_universes () then
     build "Axiom" [kn'; typ_ast; build_universe_instance u]
@@ -379,7 +373,7 @@ let build_axiom (kn : kernel_name) (typ_ast : string) (u : Instance.t) =
 (*
  * Build the AST for a definition
  *)
-let build_definition (kn : kernel_name) (typ_ast : string) (u : Instance.t) =
+let build_definition (kn : KerName.t) (typ_ast : string) (u : Instance.t) =
    let kn' = build_kername kn in
    if show_universes () then
      build "Definition" [kn'; typ_ast; build_universe_instance u]
@@ -403,7 +397,7 @@ let build_definition (kn : kernel_name) (typ_ast : string) (u : Instance.t) =
  * A fixpoint also creates bindings that we need to push to the environment
  * This function gets all of those bindings
  *)
-let bindings_for_fix (names : name array) (typs : constr array) =
+let bindings_for_fix (names : Name.t array) (typs : constr array) =
   Array.to_list
     (CArray.map2_i
       (fun i name typ -> CRD.(LocalAssum (name, Vars.lift i typ)))
@@ -412,7 +406,7 @@ let bindings_for_fix (names : name array) (typs : constr array) =
 (*
  * Build the AST for a function in a fixpoint
  *)
-let build_fix_fun (index : int) (n : name) (typ_ast : string) (body_ast : string) =
+let build_fix_fun (index : int) (n : Name.t) (typ_ast : string) (body_ast : string) =
   build (build_name n) [string_of_int index; typ_ast; body_ast]
 
 (*
@@ -450,7 +444,7 @@ let lookup_mutind_body (i : mutual_inductive) (env : env) =
  *)
 let build_inductive_name (ind_body : one_inductive_body) =
   let name_id = ind_body.mind_typename in
-  build_name (Names.Name name_id)
+  build_name (Name name_id)
 
 (*
  * Inductive types also create bindings that we need to push to the environment
@@ -470,7 +464,7 @@ let bindings_for_inductive (env : env) (mutind_body : mutual_inductive_body) (in
 (*
  * Build an AST for a mutually inductive type
  *)
-let build_inductive (ind_or_coind : Decl_kinds.recursivity_kind) (body_asts : string list) (u : Instance.t) =
+let build_inductive (ind_or_coind : recursivity_kind) (body_asts : string list) (u : Instance.t) =
   let kind_of_ind =
     match ind_or_coind with
       Finite -> "Inductive"
@@ -555,7 +549,7 @@ let build_proj (p_const_ast : string) (c_ast : string) =
 (* --- Full AST --- *)
 
 let rec build_ast (env : env) (depth : int) (trm : types) =
-  match kind_of_term trm with
+  match kind trm with
     Rel i ->
       build_rel env i
   | Var v ->
@@ -591,7 +585,7 @@ let rec build_ast (env : env) (depth : int) (trm : types) =
   | Const (c, u) ->
       build_const env depth (c, u)
   | Construct ((i, c_index), u) ->
-      let i' = build_ast env depth (Term.mkInd i) in
+      let i' = build_ast env depth (mkInd i) in
       build_constructor i' c_index u
   | Ind ((i, i_index), u) ->
       build_minductive env depth ((i, i_index), u)
@@ -605,7 +599,7 @@ let rec build_ast (env : env) (depth : int) (trm : types) =
   | CoFix (i, (ns, ts, ds)) ->
       build_cofix (build_fixpoint_functions env depth ns ts ds) i
   | Proj (p, c) ->
-      let p' = build_ast env depth (Term.mkConst (Projection.constant p)) in
+      let p' = build_ast env depth (mkConst (Projection.constant p)) in
       let c' = build_ast env depth c in
       build_proj p' c'
 
@@ -620,7 +614,7 @@ and build_const (env : env) (depth : int) ((c, u) : pconstant) =
   | Some c ->
      build_definition kn (build_ast global_env (depth - 1) c) u
 
-and build_fixpoint_functions (env : env) (depth : int) (names : name array) (typs : constr array) (defs : constr array)  =
+and build_fixpoint_functions (env : env) (depth : int) (names : Name.t array) (typs : constr array) (defs : constr array)  =
   let env_fix = push_rel_context (bindings_for_fix names typs) env in
   List.map
     (fun i ->
@@ -632,9 +626,9 @@ and build_fixpoint_functions (env : env) (depth : int) (names : name array) (typ
 and build_oinductive (env : env) (depth : int) (ind_body : one_inductive_body) =
   let constrs =
     List.map
-      (fun (i, (n, typ)) -> build (Names.string_of_id n) [i; build_ast env (depth - 1) typ])
+      (fun (i, (n, typ)) -> build (Id.to_string n) [i; build_ast env (depth - 1) typ])
     (named_constructors ind_body)
-  in build (build "Name" [Names.string_of_id ind_body.mind_typename]) [build_inductive_body constrs]
+  in build (build "Name" [Id.to_string ind_body.mind_typename]) [build_inductive_body constrs]
 
 and build_minductive (env : env) (depth : int) (((i, i_index), u) : pinductive) =
   let mutind_body = lookup_mutind_body i env in
@@ -655,7 +649,7 @@ and build_minductive (env : env) (depth : int) (((i, i_index), u) : pinductive) 
  * That is, always unfold the first constant or inductive definition
  *)
 let apply_to_definition (f : env -> int -> types -> 'a) (env : env) (depth : int) (body : types) =
-  match (kind_of_term body) with
+  match (kind body) with
   | Const _ ->
       f env (depth + 1) body
   | Ind _ ->
@@ -665,7 +659,7 @@ let apply_to_definition (f : env -> int -> types -> 'a) (env : env) (depth : int
 
 (* Top-level print AST functionality *)
 let print_ast (depth : int) (def : Constrexpr.constr_expr) : unit =
-  let (evm, env) = Lemmas.get_current_context () in
+  let (evm, env) = Pfedit.get_current_context () in
   let (ebody, _) = Constrintern.interp_constr env evm def in
   let body = EConstr.to_constr evm ebody in
   let ast = apply_to_definition build_ast env depth body in
