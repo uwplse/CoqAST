@@ -19,7 +19,7 @@ For example:
 
 ## Using the Plugin
 
-The plugin is built to work with Coq 8.8. It may not build for other versions of Coq, since the
+The plugin is built to work with Coq 8.9. It may not build for other versions of Coq, since the
 API sometimes changes between Coq versions.
 
 To build:
