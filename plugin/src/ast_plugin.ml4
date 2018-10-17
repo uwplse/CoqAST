@@ -247,9 +247,10 @@ let build_universe_instance (i : Instance.t) =
  * Build the AST for a sort
  *)
 let build_sort (s : Sorts.t) =
-  let s_ast =
+  let s_ast = let open Sorts in
     match s with
-    | Prop _ -> if s = Sorts.prop then "Prop" else "Set"
+    | Prop -> "Prop"
+    | Set -> "Set"
     | Type u -> build "Type" [build_universe u]
   in build "Sort" [s_ast]
 
@@ -436,7 +437,7 @@ let build_cofix (funs : string list) (index : int) =
 (*
  * Get the body of a mutually inductive type
  *)
-let lookup_mutind_body (i : mutual_inductive) (env : env) =
+let lookup_mutind_body (i : MutInd.t) (env : env) =
   lookup_mind i env
 
 (*
