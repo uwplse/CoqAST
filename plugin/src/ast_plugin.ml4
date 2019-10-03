@@ -657,7 +657,16 @@ let apply_to_definition (f : env -> int -> types -> 'a) (env : env) (depth : int
   | _ ->
       f env depth body
 
-(* Top-level print AST functionality *)
+(*
+ * Top-level print AST functionality
+ *
+ * NOTE: Here I ignore the evar_map (evm) which in Coq stores state. When writing real Coq plugins, you should not
+ * ignore the evar_map. I will add an example showing how to deal with the evar_map at some point. But, for the sake
+ * of simply understanding the structure of terms and printing a string, this should be OK.
+ *
+ * Examples of how to deal with evar_maps correctly can be found in the Coq documentation example tutorials in the coq
+ * repository.
+ *)
 let print_ast (depth : int) (def : Constrexpr.constr_expr) : unit =
   let (evm, env) = Pfedit.get_current_context () in
   let (ebody, _) = Constrintern.interp_constr env evm def in
